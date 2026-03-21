@@ -22,11 +22,7 @@ from src.losses import si_snr
 from src.model import DPRNNTasNet
 
 warnings.filterwarnings("ignore", category=FutureWarning, module="mir_eval")
-warnings.filterwarnings(
-    "ignore",
-    category=FutureWarning,
-    message=".*mir_eval\.separation\.bss_eval_sources.*Deprecated.*",
-)
+warnings.filterwarnings("ignore", category=FutureWarning)
 
 
 def parse_args() -> argparse.Namespace:

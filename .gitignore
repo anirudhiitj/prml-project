@@ -1,0 +1,53 @@
+# Python cache and build artifacts
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.dylib
+*.egg-info/
+.eggs/
+build/
+dist/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Tooling caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.ipynb_checkpoints/
+
+# OS/editor noise
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Logs and temporary files
+*.log
+*.tmp
+*.bak
+
+# Training artifacts
+**/checkpoints/
+**/runs/
+**/wandb/
+**/outputs/
+**/artifacts/
+
+# Generated data and large raw assets
+cocktail_separation/data/raw/
+cocktail_separation/data/mixtures/
+
+# Generated audio and model exports
+*.wav
+*.flac
+*.mp3
+*.ckpt
+*.pt
+*.pth
+*.onnx

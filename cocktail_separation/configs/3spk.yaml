@@ -1,0 +1,12 @@
+defaults:
+  - base
+
+model:
+  num_speakers: 3
+
+data:
+  root: data/mixtures/3spk
+
+train:
+  epochs: 50
+  lr: 0.0002

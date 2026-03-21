@@ -1,0 +1,18 @@
+defaults:
+  - 2spk
+
+experiment_name: dprnn_2spk_cpu_smoke
+
+train:
+  epochs: 2
+  lr: 0.0005
+  amp: false
+
+logging:
+  use_wandb: false
+  log_interval: 5
+
+data:
+  train_batch_size: 2
+  val_batch_size: 2
+  num_workers: 0

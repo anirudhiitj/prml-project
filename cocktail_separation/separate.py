@@ -4,9 +4,11 @@ import argparse
 from pathlib import Path
 from typing import Dict, List
 
+import numpy as np
+import soundfile as sf
 import torch
-import torchaudio
 from omegaconf import OmegaConf
+from scipy.signal import resample_poly
 
 from src.model import DPRNNTasNet
 
@@ -21,30 +23,30 @@ def parse_args() -> argparse.Namespace:
 
 
 def load_config(config_path: str) -> Dict:
-    cfg = OmegaConf.load(config_path)
-    cfg_dict = OmegaConf.to_container(cfg, resolve=True)
-    defaults = cfg_dict.get("defaults", []) if isinstance(cfg_dict, dict) else []
+    def _load_recursive(path: Path):
+        cfg_obj = OmegaConf.load(path)
+        cfg_obj_dict = OmegaConf.to_container(cfg_obj, resolve=False)
+        defaults = cfg_obj_dict.get("defaults", []) if isinstance(cfg_obj_dict, dict) else []
 
-    if defaults:
         merged = OmegaConf.create()
-        base_dir = Path(config_path).parent
         for entry in defaults:
             if isinstance(entry, str):
-                base_cfg = OmegaConf.load(base_dir / f"{entry}.yaml")
-                merged = OmegaConf.merge(merged, base_cfg)
-        merged = OmegaConf.merge(merged, cfg)
-        return OmegaConf.to_container(merged, resolve=True)
+                dep_path = (path.parent / f"{entry}.yaml").resolve()
+                merged = OmegaConf.merge(merged, _load_recursive(dep_path))
 
-    return cfg_dict
+        return OmegaConf.merge(merged, cfg_obj)
+
+    final_cfg = _load_recursive(Path(config_path).resolve())
+    return OmegaConf.to_container(final_cfg, resolve=True)
 
 
 def load_audio_mono_16k(path: Path, sample_rate: int = 16000) -> torch.Tensor:
-    audio, sr = torchaudio.load(str(path))
-    if audio.shape[0] > 1:
-        audio = audio.mean(dim=0, keepdim=True)
+    audio, sr = sf.read(str(path), always_2d=False)
+    if audio.ndim > 1:
+        audio = audio.mean(axis=1)
     if sr != sample_rate:
-        audio = torchaudio.functional.resample(audio, sr, sample_rate)
-    return audio.squeeze(0)
+        audio = resample_poly(audio, sample_rate, sr)
+    return torch.from_numpy(np.asarray(audio, dtype=np.float32))
 
 
 def overlap_add_segments(segments: List[torch.Tensor], hop: int, total_len: int) -> torch.Tensor:
@@ -106,7 +108,7 @@ def main() -> None:
 
     for idx in range(separated.shape[0]):
         out_path = out_dir / f"speaker_{idx + 1}.wav"
-        torchaudio.save(str(out_path), separated[idx].unsqueeze(0), sr)
+        sf.write(str(out_path), separated[idx].cpu().numpy(), sr)
 
 
 if __name__ == "__main__":

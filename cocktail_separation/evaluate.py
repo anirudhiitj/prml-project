@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import warnings
 from pathlib import Path
 from typing import Dict, List
 
@@ -20,6 +21,13 @@ from src.dataset import build_dataloader
 from src.losses import si_snr
 from src.model import DPRNNTasNet
 
+warnings.filterwarnings("ignore", category=FutureWarning, module="mir_eval")
+warnings.filterwarnings(
+    "ignore",
+    category=FutureWarning,
+    message=".*mir_eval\.separation\.bss_eval_sources.*Deprecated.*",
+)
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Evaluate DPRNN-TasNet")
@@ -29,21 +37,21 @@ def parse_args() -> argparse.Namespace:
 
 
 def load_config(config_path: str) -> Dict:
-    cfg = OmegaConf.load(config_path)
-    cfg_dict = OmegaConf.to_container(cfg, resolve=True)
-    defaults = cfg_dict.get("defaults", []) if isinstance(cfg_dict, dict) else []
+    def _load_recursive(path: Path):
+        cfg_obj = OmegaConf.load(path)
+        cfg_obj_dict = OmegaConf.to_container(cfg_obj, resolve=False)
+        defaults = cfg_obj_dict.get("defaults", []) if isinstance(cfg_obj_dict, dict) else []
 
-    if defaults:
         merged = OmegaConf.create()
-        base_dir = Path(config_path).parent
         for entry in defaults:
             if isinstance(entry, str):
-                base_cfg = OmegaConf.load(base_dir / f"{entry}.yaml")
-                merged = OmegaConf.merge(merged, base_cfg)
-        merged = OmegaConf.merge(merged, cfg)
-        return OmegaConf.to_container(merged, resolve=True)
+                dep_path = (path.parent / f"{entry}.yaml").resolve()
+                merged = OmegaConf.merge(merged, _load_recursive(dep_path))
 
-    return cfg_dict
+        return OmegaConf.merge(merged, cfg_obj)
+
+    final_cfg = _load_recursive(Path(config_path).resolve())
+    return OmegaConf.to_container(final_cfg, resolve=True)
 
 
 def pairwise_sisnr(est: torch.Tensor, ref: torch.Tensor) -> torch.Tensor:

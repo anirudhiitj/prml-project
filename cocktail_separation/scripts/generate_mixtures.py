@@ -5,8 +5,10 @@ import random
 from pathlib import Path
 from typing import Dict, List
 
+import numpy as np
+import soundfile as sf
 import torch
-import torchaudio
+from scipy.signal import resample_poly
 from tqdm import tqdm
 
 
@@ -25,12 +27,12 @@ def parse_args() -> argparse.Namespace:
 
 
 def load_mono_16k(path: Path, target_sr: int) -> torch.Tensor:
-    x, sr = torchaudio.load(str(path))
-    if x.shape[0] > 1:
-        x = x.mean(dim=0, keepdim=True)
+    x, sr = sf.read(str(path), always_2d=False)
+    if x.ndim > 1:
+        x = x.mean(axis=1)
     if sr != target_sr:
-        x = torchaudio.functional.resample(x, sr, target_sr)
-    return x.squeeze(0)
+        x = resample_poly(x, target_sr, sr)
+    return torch.from_numpy(np.asarray(x, dtype=np.float32))
 
 
 def fix_length(x: torch.Tensor, target_len: int) -> torch.Tensor:
@@ -93,9 +95,9 @@ def main() -> None:
         ex_dir = output_root / f"{idx:07d}"
         ex_dir.mkdir(parents=True, exist_ok=True)
 
-        torchaudio.save(str(ex_dir / "mixture.wav"), mixture.unsqueeze(0), args.sample_rate)
+        sf.write(str(ex_dir / "mixture.wav"), mixture.cpu().numpy(), args.sample_rate)
         for sidx in range(args.num_speakers):
-            torchaudio.save(str(ex_dir / f"s{sidx + 1}.wav"), source_stack[sidx].unsqueeze(0), args.sample_rate)
+            sf.write(str(ex_dir / f"s{sidx + 1}.wav"), source_stack[sidx].cpu().numpy(), args.sample_rate)
 
 
 if __name__ == "__main__":

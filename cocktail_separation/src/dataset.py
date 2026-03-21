@@ -4,19 +4,21 @@ import random
 from pathlib import Path
 from typing import List, Optional, Tuple
 
+import numpy as np
+import soundfile as sf
 import torch
-import torchaudio
+from scipy.signal import resample_poly
 from torch.utils.data import DataLoader, Dataset
 from torch.utils.data.distributed import DistributedSampler
 
 
 def _load_mono_16k(path: Path, sample_rate: int = 16000) -> torch.Tensor:
-    audio, sr = torchaudio.load(str(path))
-    if audio.size(0) > 1:
-        audio = audio.mean(dim=0, keepdim=True)
+    audio, sr = sf.read(str(path), always_2d=False)
+    if audio.ndim > 1:
+        audio = audio.mean(axis=1)
     if sr != sample_rate:
-        audio = torchaudio.functional.resample(audio, sr, sample_rate)
-    return audio.squeeze(0)
+        audio = resample_poly(audio, sample_rate, sr)
+    return torch.from_numpy(np.asarray(audio, dtype=np.float32))
 
 
 def _fix_length(x: torch.Tensor, target_len: int) -> torch.Tensor:
@@ -89,13 +91,15 @@ def build_dataloader(
     if distributed:
         sampler = DistributedSampler(dataset, shuffle=shuffle)
 
+    use_pin_memory = torch.cuda.is_available()
+
     loader_kwargs = {
         "dataset": dataset,
         "batch_size": batch_size,
         "shuffle": (shuffle and sampler is None),
         "sampler": sampler,
         "num_workers": num_workers,
-        "pin_memory": True,
+        "pin_memory": use_pin_memory,
         "persistent_workers": num_workers > 0,
         "drop_last": shuffle,
     }

@@ -50,7 +50,10 @@ def load_audio_mono_16k(path: Path, sample_rate: int = 16000) -> torch.Tensor:
 
 def overlap_add_segments(segments: list[torch.Tensor], hop: int, total_len: int) -> torch.Tensor:
     """segments list entries are (C, seg_len)."""
+    from scipy.optimize import linear_sum_assignment
+    
     c, seg_len = segments[0].shape
+    overlap = seg_len - hop
     out = torch.zeros((c, total_len), dtype=segments[0].dtype)
     weight = torch.zeros((1, total_len), dtype=segments[0].dtype)
 
@@ -58,6 +61,23 @@ def overlap_add_segments(segments: list[torch.Tensor], hop: int, total_len: int)
         start = idx * hop
         end = min(start + seg_len, total_len)
         valid = end - start
+        
+        # Ensure permutation tracking across chunks if overlap exists
+        if idx > 0 and overlap > 0:
+            # Reference signal is the previously stitched output in the overlap region
+            ref_overlap = out[:, start : start + overlap] / torch.clamp(weight[:, start : start + overlap], min=1.0)
+            cur_overlap = seg[:, :overlap]
+            
+            # Cross-correlation matrix between already tracked speakers and new chunk's speakers
+            cost_matrix = torch.matmul(ref_overlap, cur_overlap.T)
+            
+            # Maximize correlation (minimize negative cost matrix)
+            cost_np = -cost_matrix.cpu().numpy()
+            row_ind, col_ind = linear_sum_assignment(cost_np)
+            
+            # Permute the current chunk channels to match the reference
+            seg = seg[col_ind, :]
+            
         out[:, start:end] += seg[:, :valid]
         weight[:, start:end] += 1.0
 

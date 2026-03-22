@@ -3,7 +3,6 @@ from __future__ import annotations
 import argparse
 import warnings
 from pathlib import Path
-from typing import Dict, List
 
 import numpy as np
 import torch
@@ -32,7 +31,7 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def load_config(config_path: str) -> Dict:
+def load_config(config_path: str) -> dict:
     def _load_recursive(path: Path):
         cfg_obj = OmegaConf.load(path)
         cfg_obj_dict = OmegaConf.to_container(cfg_obj, resolve=False)
@@ -78,7 +77,7 @@ def safe_pesq(ref: np.ndarray, deg: np.ndarray, fs: int) -> float:
 
 def main() -> None:
     args = parse_args()
-    cfg: Dict = load_config(args.config)
+    cfg: dict = load_config(args.config)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -99,9 +98,9 @@ def main() -> None:
         sample_rate=int(cfg["data"]["sample_rate"]),
     )
 
-    si_snr_improvements: List[float] = []
-    sdri_values: List[float] = []
-    pesq_values: List[float] = []
+    si_snr_improvements: list[float] = []
+    sdri_values: list[float] = []
+    pesq_values: list[float] = []
 
     for mixture, sources in tqdm(test_loader, desc="evaluate"):
         mixture = mixture.to(device)
@@ -136,7 +135,7 @@ def main() -> None:
                 safe_pesq(ref_b[spk].numpy(), est_b[spk].numpy(), int(cfg["data"]["sample_rate"]))
             )
 
-    def mean_std(values: List[float]) -> str:
+    def mean_std(values: list[float]) -> str:
         arr = np.asarray([v for v in values if np.isfinite(v)], dtype=np.float64)
         if arr.size == 0:
             return "nan ± nan"

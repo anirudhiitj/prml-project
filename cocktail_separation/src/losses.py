@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from typing import Tuple
-
 import torch
 from scipy.optimize import linear_sum_assignment
 
@@ -37,7 +35,7 @@ def snr(estimated: torch.Tensor, target: torch.Tensor, eps: float = 1e-8) -> tor
 def _pairwise_metric(
     estimated_sources: torch.Tensor,
     true_sources: torch.Tensor,
-    metric_fn,
+    metric_fn: callable,
 ) -> torch.Tensor:
     """Build pairwise metric matrix with shape (B, C, C)."""
     b, c, _ = estimated_sources.shape
@@ -50,7 +48,7 @@ def _pairwise_metric(
     return metric_matrix
 
 
-def _hungarian_best_assignment(pairwise_scores: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+def _hungarian_best_assignment(pairwise_scores: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
     """
     Args:
         pairwise_scores: (C, C) where higher is better.
@@ -68,7 +66,7 @@ def pit_loss(
     true_sources: torch.Tensor,
     eps: float = 1e-8,
     snr_weight: float = 0.0,
-) -> Tuple[torch.Tensor, torch.Tensor]:
+) -> tuple[torch.Tensor, torch.Tensor]:
     """
     Utterance-level PIT loss with Hungarian assignment.
 

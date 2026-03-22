@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from typing import Tuple
-
 import torch
 import torch.nn as nn
 
@@ -40,7 +38,7 @@ class DPRNNSeparator(nn.Module):
             nn.Conv1d(bottleneck_dim, encoder_dim * num_speakers, kernel_size=1),
         )
 
-    def _pad_for_chunking(self, x: torch.Tensor) -> Tuple[torch.Tensor, int, int]:
+    def _pad_for_chunking(self, x: torch.Tensor) -> tuple[torch.Tensor, int, int]:
         b, h, t = x.shape
         k = self.chunk_size
         step = self.hop_size
@@ -53,7 +51,7 @@ class DPRNNSeparator(nn.Module):
 
         return x, rest, step
 
-    def _segment(self, x: torch.Tensor) -> Tuple[torch.Tensor, int, int]:
+    def _segment(self, x: torch.Tensor) -> tuple[torch.Tensor, int, int]:
         x, rest, step = self._pad_for_chunking(x)
         b, h, _ = x.shape
 

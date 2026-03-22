@@ -3,7 +3,6 @@ from __future__ import annotations
 import argparse
 import random
 from pathlib import Path
-from typing import Dict, List
 
 import numpy as np
 import soundfile as sf
@@ -44,7 +43,7 @@ def fix_length(x: torch.Tensor, target_len: int) -> torch.Tensor:
     return x
 
 
-def build_speaker_index(source_root: Path) -> Dict[str, List[Path]]:
+def build_speaker_index(source_root: Path) -> dict[str, list[Path]]:
     speakers = {}
     for spk_dir in source_root.iterdir():
         if not spk_dir.is_dir():

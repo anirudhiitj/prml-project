@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
-from typing import Dict, List
 
 import numpy as np
 import soundfile as sf
@@ -22,7 +21,7 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def load_config(config_path: str) -> Dict:
+def load_config(config_path: str) -> dict:
     def _load_recursive(path: Path):
         cfg_obj = OmegaConf.load(path)
         cfg_obj_dict = OmegaConf.to_container(cfg_obj, resolve=False)
@@ -49,7 +48,7 @@ def load_audio_mono_16k(path: Path, sample_rate: int = 16000) -> torch.Tensor:
     return torch.from_numpy(np.asarray(audio, dtype=np.float32))
 
 
-def overlap_add_segments(segments: List[torch.Tensor], hop: int, total_len: int) -> torch.Tensor:
+def overlap_add_segments(segments: list[torch.Tensor], hop: int, total_len: int) -> torch.Tensor:
     """segments list entries are (C, seg_len)."""
     c, seg_len = segments[0].shape
     out = torch.zeros((c, total_len), dtype=segments[0].dtype)

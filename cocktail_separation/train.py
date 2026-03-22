@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import random
+import warnings
 from pathlib import Path
-from typing import Dict, Tuple
 
 import numpy as np
 import torch
@@ -14,6 +15,11 @@ from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.optim import Adam
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from tqdm import tqdm
+
+# Suppress common warnings
+warnings.filterwarnings('ignore', category=UserWarning)
+warnings.filterwarnings('ignore', category=DeprecationWarning)
+warnings.filterwarnings('ignore', category=RuntimeWarning)
 
 try:
     import wandb
@@ -29,10 +35,12 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Train DPRNN-TasNet")
     parser.add_argument("--config", type=str, required=True, help="Path to YAML config")
     parser.add_argument("--resume", type=str, default="", help="Checkpoint path to resume")
+    parser.add_argument("--status-file", type=str, default="", help="JSON file for progress tracking")
+    parser.add_argument("--output-dir", type=str, default="", help="Output directory for results")
     return parser.parse_args()
 
 
-def load_config(config_path: str) -> Dict:
+def load_config(config_path: str) -> dict:
     def _load_recursive(path: Path):
         cfg_obj = OmegaConf.load(path)
         cfg_obj_dict = OmegaConf.to_container(cfg_obj, resolve=False)
@@ -78,7 +86,7 @@ def cleanup_distributed() -> None:
         dist.destroy_process_group()
 
 
-def maybe_init_wandb(cfg: Dict, rank: int) -> None:
+def maybe_init_wandb(cfg: dict, rank: int) -> None:
     use_wandb = cfg["logging"]["use_wandb"]
     if rank != 0 or not use_wandb:
         return
@@ -99,7 +107,7 @@ def save_checkpoint(
     optimizer: torch.optim.Optimizer,
     scheduler: torch.optim.lr_scheduler._LRScheduler,
     val_sisnr: float,
-    cfg: Dict,
+    cfg: dict,
 ) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     model_state = model.module.state_dict() if isinstance(model, DDP) else model.state_dict()
@@ -113,6 +121,75 @@ def save_checkpoint(
         "config": cfg,
     }
     torch.save(ckpt, path)
+
+
+def update_status_file(
+    status_file: str,
+    epoch: int,
+    train_loss: float,
+    train_sisnr: float,
+    val_loss: float,
+    val_sisnr: float,
+    learning_rate: float,
+    epoch_time: float,
+) -> None:
+    """Update training status JSON file with current epoch metrics."""
+    if not status_file:
+        return
+
+    status_path = Path(status_file)
+    try:
+        if status_path.exists():
+            with open(status_path, 'r') as f:
+                status = json.load(f)
+        else:
+            status = {
+                "phase": 1,
+                "num_speakers": 2,
+                "start_time": None,
+                "end_time": None,
+                "status": "RUNNING",
+                "gpus": [5, 6],
+                "total_epochs": None,
+                "current_epoch": 0,
+                "best_val_sisnr": -float('inf'),
+                "best_val_sisnr_epoch": -1,
+                "training_history": {
+                    "epoch": [],
+                    "train_loss": [],
+                    "train_sisnr": [],
+                    "val_loss": [],
+                    "val_sisnr": [],
+                    "learning_rate": [],
+                    "grad_norm": [],
+                    "epoch_time": []
+                },
+                "time_per_epoch_estimates": [],
+                "eta_hours": None
+            }
+
+        # Update current values
+        status["current_epoch"] = epoch
+        status["training_history"]["epoch"].append(epoch)
+        status["training_history"]["train_loss"].append(float(train_loss))
+        status["training_history"]["train_sisnr"].append(float(train_sisnr))
+        status["training_history"]["val_loss"].append(float(val_loss))
+        status["training_history"]["val_sisnr"].append(float(val_sisnr))
+        status["training_history"]["learning_rate"].append(float(learning_rate))
+        status["training_history"]["epoch_time"].append(float(epoch_time))
+
+        # Track best validation SI-SNR
+        if val_sisnr > status["best_val_sisnr"]:
+            status["best_val_sisnr"] = val_sisnr
+            status["best_val_sisnr_epoch"] = epoch
+
+        # Write updated status
+        status_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(status_path, 'w') as f:
+            json.dump(status, f, indent=4)
+    except Exception as e:
+        print(f"[WARNING] Failed to update status file {status_file}: {e}")
+
 
 
 def run_epoch(
@@ -280,6 +357,18 @@ def main() -> None:
             }
             if cfg["logging"]["use_wandb"] and wandb is not None:
                 wandb.log(log_payload)
+
+            # Update status file with current epoch metrics
+            update_status_file(
+                status_file=args.status_file,
+                epoch=epoch,
+                train_loss=train_loss,
+                train_sisnr=train_si,
+                val_loss=val_loss,
+                val_sisnr=val_si,
+                learning_rate=optimizer.param_groups[0]["lr"],
+                epoch_time=0.0,  # We don't track time in train.py currently
+            )
 
             save_checkpoint(
                 path=ckpt_dir / "latest.pt",

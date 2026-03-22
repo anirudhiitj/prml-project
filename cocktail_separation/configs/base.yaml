@@ -17,7 +17,7 @@ data:
   clip_samples: 64000
   train_batch_size: 8
   val_batch_size: 4
-  num_workers: 8
+  num_workers: 0
 
 train:
   epochs: 100

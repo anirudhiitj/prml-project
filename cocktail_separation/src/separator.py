@@ -111,5 +111,5 @@ class DPRNNSeparator(nn.Module):
 
         x = self._overlap_add(chunks, rest=rest, step=step, target_len=t)
         logits = self.mask_head(x).view(b, self.num_speakers, n, t)
-        masks = torch.softmax(logits, dim=1)
+        masks = torch.sigmoid(logits)
         return masks

@@ -40,7 +40,13 @@ def load_config(config_path: str) -> dict:
 
 
 def load_audio_mono_16k(path: Path, sample_rate: int = 16000) -> torch.Tensor:
-    audio, sr = sf.read(str(path), always_2d=False)
+    try:
+        audio, sr = sf.read(str(path), always_2d=False)
+    except Exception:
+        # Fallback for MP3 and other formats soundfile can't handle
+        import librosa
+        audio, sr = librosa.load(str(path), sr=sample_rate, mono=True)
+        return torch.from_numpy(np.asarray(audio, dtype=np.float32))
     if audio.ndim > 1:
         audio = audio.mean(axis=1)
     if sr != sample_rate:

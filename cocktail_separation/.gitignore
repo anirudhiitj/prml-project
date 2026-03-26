@@ -65,6 +65,8 @@ venv.bak/
 
 # Data and outputs
 data/mixtures/
+data/
+dprnn2/
 checkpoints/
 training_results/
 test_*/

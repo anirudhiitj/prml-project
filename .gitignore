@@ -42,6 +42,8 @@ Thumbs.db
 # Generated data and large raw assets
 cocktail_separation/data/raw/
 cocktail_separation/data/mixtures/
+cocktail_separation/data/
+cocktail_separation/dprnn2/
 
 # Generated audio and model exports
 *.wav

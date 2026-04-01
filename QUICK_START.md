@@ -186,7 +186,6 @@ To use only one GPU:
 ```bash
 CUDA_VISIBLE_DEVICES=5 python train.py --config configs/5spk.yaml
 ```
-
 ---
 
 ## References

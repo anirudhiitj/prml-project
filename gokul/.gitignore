@@ -1,0 +1,13 @@
+build/
+libtorch/
+libtorch.zip
+data/
+checkpoints/
+output/
+third_party/
+*.wav
+*.o
+*.so
+*.a
+.cache/
+compile_commands.json

@@ -1,0 +1,45 @@
+experiment_name: dprnn_tasnet
+seed: 42
+
+model:
+  num_speakers: 5
+  encoder_dim: 64
+  encoder_kernel: 2
+  encoder_stride: 2
+  bottleneck_dim: 64
+  chunk_size: 100
+  num_dprnn_blocks: 6
+
+data:
+  root: data/mixtures/5spk
+  sample_rate: 16000
+  clip_seconds: 4
+  clip_samples: 64000
+  train_batch_size: 8
+  val_batch_size: 4
+  num_workers: 0
+
+train:
+  epochs: 100
+  lr: 0.001
+  betas: [0.9, 0.999]
+  weight_decay: 0.00001
+  grad_clip_norm: 5.0
+  snr_weight: 0.1
+  amp: true
+
+scheduler:
+  mode: max
+  factor: 0.5
+  patience: 5
+  min_lr: 0.000001
+
+logging:
+  use_wandb: true
+  project: cocktail-separation
+  log_interval: 20
+  save_audio_every: 10
+
+checkpoints:
+  dir: checkpoints
+  save_every: 10

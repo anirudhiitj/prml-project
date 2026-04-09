@@ -1,0 +1,47 @@
+defaults:
+  - base
+
+experiment_name: dprnn_tasnet_3spk_real
+
+model:
+  num_speakers: 3
+  encoder_dim: 256
+  encoder_kernel: 16
+  encoder_stride: 8
+  bottleneck_dim: 128
+  chunk_size: 100
+  num_dprnn_blocks: 6
+
+data:
+  root: data/real_librispeech_mixtures/3spk
+  sample_rate: 16000
+  clip_seconds: 3
+  clip_samples: 48000
+  train_batch_size: 6
+  val_batch_size: 4
+  num_workers: 8
+
+train:
+  epochs: 100
+  lr: 0.001
+  betas: [0.9, 0.999]
+  weight_decay: 0.00001
+  grad_clip_norm: 5.0
+  snr_weight: 0.1
+  amp: true
+
+scheduler:
+  mode: max
+  factor: 0.5
+  patience: 5
+  min_lr: 0.000001
+
+logging:
+  use_wandb: false
+  project: cocktail-separation
+  log_interval: 50
+  save_audio_every: 10
+
+checkpoints:
+  dir: checkpoints/3spk_real
+  save_every: 10

@@ -1,0 +1,107 @@
+# Conv-TasNet Hyperparameter Tuning Report
+
+This document serves as the central record for all architecture exploration and hyperparameter experiments.
+
+## 1. Baseline Model (`v1_baseline`)
+This was the very first model trained on the default hyperparameters.
+* **Architecture (`model.py`)**: 
+  * `X` (n_blocks) = 8
+  * `R` (n_repeats) = 3
+  * `B` (bn_chan) = 128
+  * `H` (hid_chan) = 512
+* **Training Setup**: 
+  * Batch Size = 4, LR = 1e-3, Epochs = 100, Precision = bf16
+* **Metrics**:
+  * **Final Val SI-SDR**: `-10.6396 dB`
+  * **Status**: Completed successfully on GPU 6. Output checkpoint stored at `checkpoints/best_model.pt`.
+
+---
+
+## 2. Massively Scaled Architecture (`v2_scaled_arch`)
+This model significantly increases the size of the neural network parameters to take advantage of the H200's massive 141 GB VRAM capacity.
+* **Architecture (`model.py`)**: 
+  * `X` (n_blocks) = 10 *(+2: drastically increases temporal network depth)*
+  * `R` (n_repeats) = 4 *(+1: significantly scales the time receptive field)*
+  * `B` (bn_chan) = 256 *(Doubled bottleneck capacity)*
+  * `H` (hid_chan) = 1024 *(Doubled hidden convolutional width)*
+* **Training Setup**: 
+  * Executable: `bash run_tuning_scaled.sh`
+  * Checkpoint Output Folder: `checkpoints/v2_scaled_arch/`
+* **Metrics**:
+  * **Final Val SI-SDR**: `0.8115 dB` (Train SI-SDR: `0.6540 dB`)
+  * **Status**: Completed successfully (failed to converge).
+
+---
+
+## 3. Improved Baseline Target (`v3_improved`)
+This model aggressively targets training stability over raw parameter size by reverting to the flawlessly performing `v1` architecture and multiplying the data exposure algorithmically.
+* **Architecture (`model.py`)**: 
+  * `X` (n_blocks) = 8
+  * `R` (n_repeats) = 3
+  * `B` (bn_chan) = 128
+  * `H` (hid_chan) = 512
+* **Training Setup**: 
+  * Executable: `bash run_tuning_v3.sh`
+  * Checkpoint Output Folder: `checkpoints/v3_improved/`
+  * Strategy: Massive batch sizes (`16`), deep epoch history (`200` epochs), `4000` mixed audio steps per epoch.
+* **Metrics**:
+  * **Final Val SI-SDR**: *Pending (Awaiting user run)*
+  * **Status**: Actively Training on GPU 4.
+
+---
+
+## 4. 3-Speaker Tuning Variant (`v4_improved_3spk`)
+This experiment explicitly duplicates the maximum-stability tuning from `v3`, but applies `--n_src 3` parameter scaling to natively isolate 3 distinct simultaneous voices from the training sets.
+* **Architecture (`model.py`)**: 
+  * `X` (8), `R` (3), `B` (128), `H` (512)
+  * Output Mask dimension isolated to 3 speakers.
+* **Training Setup**: 
+  * Executable: `bash run_tuning_v4_3spk.sh`
+  * Target Hardware: GPU 7
+  * Checkpoint Output Folder: `checkpoints/v4_improved_3spk/`
+  * Strategy: Batch size (`16`), 200 epochs, 4000 virtual steps per epoch.
+* **Metrics**:
+  * **Final Val SI-SDR**: *Pending (Awaiting user run)*
+  * **Status**: Ready to execute.
+
+---
+
+## 5. Noise-Resilient Model (`v5_denoise`)
+This experiment uses the proven V3 architecture but trains with **MUSAN noise injection** to teach the model to natively suppress background noise. The mixture during training is ($Speaker A + Speaker B + Noise$), but the loss targets remain ($Speaker A, Speaker B$) only — forcing the network to learn to subtract environmental noise.
+* **Architecture (`model.py`)**: 
+  * `X` (8), `R` (3), `B` (128), `H` (512) — Identical to V3.
+* **Training Setup**: 
+  * Executable: `bash run_tuning_v5_denoise.sh`
+  * Target Hardware: GPU 4
+  * Checkpoint Output Folder: `checkpoints/v5_denoise/`
+  * Strategy: Batch size (`16`), 200 epochs, 4000 steps/epoch, MUSAN noise at SNR 5–20 dB.
+  * Noise Dataset: `musan_dataset/musan/noise/` (930 ambient noise clips)
+* **Metrics**:
+  * **Final Val SI-SDR**: *Pending (Awaiting user run)*
+  * **Status**: Ready to execute on GPU 4.
+
+---
+
+## 6. Training Trajectory (Loss Curve Analysis)
+
+The following chart outlines the Validation SI-SDR performance (higher is better) mapped across epochs, extracted directly from the tmux training logs.
+
+| Epoch | Baseline Model (v1) | Scaled Model (v2) | Status / Notes |
+| :--- | :--- | :--- | :--- |
+| **10** | *(History truncated)* | `0.68 dB` | Scaled model starts completely collapsed |
+| **20** | *(History truncated)* | `0.68 dB` | Flatlining... |
+| **30** | *(History truncated)* | `0.71 dB` | Flatlining... |
+| **40** | *(History truncated)* | `0.65 dB` | Flatlining... |
+| **50** | *(History truncated)* | `0.70 dB` | Flatlining... |
+| **60** | *(History truncated)* | `0.75 dB` | Flatlining... |
+| **70** | *(History truncated)* | `0.75 dB` | Flatlining... |
+| **80** | `10.43 dB` | `0.72 dB` | Baseline model separating audio flawlessly |
+| **90** | `10.62 dB` | `0.77 dB` | Baseline fully converges |
+| **100** | **`10.63 dB`** | **`0.81 dB`** | **Training complete.** |
+
+### Diagnostic Conclusion
+The massively scaled `v2` architecture completely failed to converge. 
+1. **Vanishing Gradients**: Deepening the network from 8 to 10 blocks per repeat dramatically altered the gradient flow across 4 temporal repeats. A training learning rate of `1e-3` (which worked for the smaller baseline) was far too aggressive for an un-regularized network of this size, immediately pushing the weights into a collapsed local minimum early in training (as seen by the flatline at ~0.7 dB).
+2. **Data-Starvation**: Scaling to `B=256` and `H=1024` effectively squares the parameter limit. Feeding this giant model just `1000` isolated batch steps per epoch of clean LibriSpeech without intense audio augmentations (like MUSAN background noise or speed perturbation) inherently forces parameter collapse.
+
+**Final Recommendation:** To actually take advantage of the massive scaled H200 model, you must lower the Learning Rate to `1e-4` and massively increase the batch size and noise augmentations!

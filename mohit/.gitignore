@@ -1,0 +1,30 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# PyTorch
+*.pth
+*.pt
+checkpoints/
+
+# Tensoboard logs
+runs/
+
+# Large log files
+*.log
+training.log
+
+# Audio files
+separated_output/
+# If you want to track test wav files, you can uncomment them or forcibly add them.
+# *.wav
+
+# Virtual Environment
+venv/
+env/
+.env
+
+# IDEs
+.vscode/
+.idea/

@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cocktail Party Speech Separation</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: 'Segoe UI', system-ui, sans-serif; background: #0f0f1a; color: #e0e0e0; min-height: 100vh; }
+
+        .container { max-width: 900px; margin: 0 auto; padding: 32px 20px; }
+
+        h1 { text-align: center; font-size: 1.8rem; margin-bottom: 8px; color: #fff; }
+        .subtitle { text-align: center; color: #888; margin-bottom: 32px; font-size: 0.95rem; }
+
+        .card {
+            background: #1a1a2e; border-radius: 12px; padding: 28px;
+            margin-bottom: 24px; border: 1px solid #2a2a40;
+        }
+
+        .card h2 { font-size: 1.1rem; margin-bottom: 16px; color: #ccc; }
+
+        /* Upload area */
+        .drop-zone {
+            border: 2px dashed #444; border-radius: 10px; padding: 40px 20px;
+            text-align: center; cursor: pointer; transition: all 0.2s;
+            background: #12121f;
+        }
+        .drop-zone:hover, .drop-zone.dragover { border-color: #6c63ff; background: #1c1c35; }
+        .drop-zone p { color: #999; margin-bottom: 8px; }
+        .drop-zone .icon { font-size: 2.5rem; margin-bottom: 8px; }
+        .drop-zone .filename { color: #6c63ff; font-weight: 600; margin-top: 8px; }
+        .drop-zone input[type="file"] { display: none; }
+
+        /* Audio preview */
+        .audio-preview { margin-top: 12px; width: 100%; }
+        .audio-preview audio { width: 100%; }
+
+        /* Controls */
+        .controls { display: flex; gap: 16px; flex-wrap: wrap; align-items: end; }
+        .control-group { flex: 1; min-width: 180px; }
+        .control-group label { display: block; font-size: 0.85rem; color: #999; margin-bottom: 6px; }
+        .control-group select {
+            width: 100%; padding: 10px 12px; background: #12121f; border: 1px solid #333;
+            border-radius: 8px; color: #e0e0e0; font-size: 0.95rem; cursor: pointer;
+        }
+        .control-group select:focus { border-color: #6c63ff; outline: none; }
+
+        .btn {
+            padding: 12px 32px; border: none; border-radius: 8px; font-size: 1rem;
+            font-weight: 600; cursor: pointer; transition: all 0.2s; min-width: 160px;
+        }
+        .btn-primary { background: #6c63ff; color: #fff; }
+        .btn-primary:hover { background: #5a52e0; }
+        .btn-primary:disabled { background: #444; cursor: not-allowed; color: #888; }
+
+        /* Spinner */
+        .spinner { display: none; text-align: center; padding: 20px; }
+        .spinner.active { display: block; }
+        .spinner::after {
+            content: ''; display: inline-block; width: 32px; height: 32px;
+            border: 3px solid #333; border-top-color: #6c63ff; border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .spinner-text { color: #999; margin-top: 8px; font-size: 0.9rem; }
+
+        /* Results */
+        .results { display: none; }
+        .results.active { display: block; }
+        .result-item {
+            display: flex; align-items: center; gap: 16px; padding: 16px;
+            background: #12121f; border-radius: 8px; margin-bottom: 12px;
+            border: 1px solid #2a2a40;
+        }
+        .result-item .speaker-label {
+            background: #6c63ff; color: #fff; padding: 6px 14px; border-radius: 6px;
+            font-weight: 600; font-size: 0.85rem; white-space: nowrap;
+        }
+        .result-item audio { flex: 1; }
+        .result-item .download-btn {
+            background: none; border: 1px solid #6c63ff; color: #6c63ff;
+            padding: 6px 14px; border-radius: 6px; cursor: pointer; font-size: 0.85rem;
+            text-decoration: none; white-space: nowrap;
+        }
+        .result-item .download-btn:hover { background: #6c63ff22; }
+
+        .result-meta {
+            padding: 12px 16px; background: #16162a; border-radius: 8px;
+            font-family: monospace; font-size: 0.85rem; color: #aaa;
+            margin-bottom: 12px;
+        }
+
+        .error-msg {
+            display: none; padding: 12px 16px; background: #2d1a1a; border: 1px solid #5a2a2a;
+            border-radius: 8px; color: #ff6b6b; margin-top: 12px;
+        }
+        .error-msg.active { display: block; }
+
+        /* Model descriptions */
+        .model-info {
+            font-size: 0.8rem; color: #666; margin-top: 6px; min-height: 1.2em;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎧 Cocktail Party Speech Separation</h1>
+        <p class="subtitle">Upload a mixed audio file and separate individual speakers</p>
+
+        <!-- Upload -->
+        <div class="card">
+            <h2>1. Upload Audio</h2>
+            <div class="drop-zone" id="dropZone">
+                <div class="icon">📁</div>
+                <p>Drag & drop your audio file here, or click to browse</p>
+                <p style="font-size: 0.8rem; color: #666;">Supports WAV, MP3, FLAC, OGG</p>
+                <input type="file" id="fileInput" accept="audio/*">
+                <div class="filename" id="fileName"></div>
+            </div>
+            <div class="audio-preview" id="audioPreview" style="display:none;">
+                <audio id="inputAudio" controls></audio>
+            </div>
+        </div>
+
+        <!-- Settings -->
+        <div class="card">
+            <h2>2. Choose Model & Settings</h2>
+            <div class="controls">
+                <div class="control-group">
+                    <label>Model</label>
+                    <select id="modelSelect">
+                        <option value="dprnn" selected>DPRNN-TasNet (Anirudh)</option>
+                        <option value="convtasnet">Conv-TasNet (Mayank)</option>
+                        <option value="convtasnet_cpp">Conv-TasNet C++ (Gokul)</option>
+                        <option value="rcnn">RCNN (Mohit)</option>
+                    </select>
+                    <div class="model-info" id="modelInfo">Dual-Path RNN with learned encoder/decoder. 16kHz.</div>
+                </div>
+                <div class="control-group">
+                    <label>Number of Speakers</label>
+                    <select id="speakerSelect">
+                        <option value="2" selected>2 Speakers</option>
+                        <option value="3">3 Speakers</option>
+                        <option value="5">5 Speakers</option>
+                    </select>
+                </div>
+                <button class="btn btn-primary" id="separateBtn" disabled>Separate</button>
+            </div>
+        </div>
+
+        <!-- Loading -->
+        <div class="spinner" id="spinner">
+            <div></div>
+            <div class="spinner-text">Separating speakers... This may take a moment.</div>
+        </div>
+
+        <!-- Error -->
+        <div class="error-msg" id="errorMsg"></div>
+
+        <!-- Results -->
+        <div class="card results" id="resultsCard">
+            <h2>3. Separated Audio</h2>
+            <div class="result-meta" id="resultMeta"></div>
+            <div id="resultsContainer"></div>
+        </div>
+    </div>
+
+    <script>
+        const dropZone = document.getElementById('dropZone');
+        const fileInput = document.getElementById('fileInput');
+        const fileName = document.getElementById('fileName');
+        const audioPreview = document.getElementById('audioPreview');
+        const inputAudio = document.getElementById('inputAudio');
+        const modelSelect = document.getElementById('modelSelect');
+        const speakerSelect = document.getElementById('speakerSelect');
+        const separateBtn = document.getElementById('separateBtn');
+        const spinner = document.getElementById('spinner');
+        const errorMsg = document.getElementById('errorMsg');
+        const resultsCard = document.getElementById('resultsCard');
+        const resultsContainer = document.getElementById('resultsContainer');
+        const resultMeta = document.getElementById('resultMeta');
+        const modelInfo = document.getElementById('modelInfo');
+
+        let selectedFile = null;
+
+        const modelDescriptions = {
+            dprnn: 'Dual-Path RNN with learned encoder/decoder. 16kHz.',
+            convtasnet: 'Convolutional TasNet using Asteroid library. 8kHz.',
+            convtasnet_cpp: 'Conv-TasNet implemented in C++ with libtorch. 8kHz.',
+            rcnn: 'Recurrent CNN — conv encoder + BiLSTM + conv decoder. 8kHz.',
+        };
+
+        modelSelect.addEventListener('change', () => {
+            modelInfo.textContent = modelDescriptions[modelSelect.value] || '';
+        });
+
+        // Drag & drop
+        dropZone.addEventListener('click', () => fileInput.click());
+        dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('dragover'); });
+        dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('dragover');
+            if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
+        });
+        fileInput.addEventListener('change', () => { if (fileInput.files.length) handleFile(fileInput.files[0]); });
+
+        function handleFile(file) {
+            selectedFile = file;
+            fileName.textContent = file.name + ' (' + (file.size / 1024 / 1024).toFixed(2) + ' MB)';
+            separateBtn.disabled = false;
+
+            // Preview
+            const url = URL.createObjectURL(file);
+            inputAudio.src = url;
+            audioPreview.style.display = 'block';
+
+            // Reset results
+            resultsCard.classList.remove('active');
+            errorMsg.classList.remove('active');
+        }
+
+        // Separate button
+        separateBtn.addEventListener('click', async () => {
+            if (!selectedFile) return;
+
+            separateBtn.disabled = true;
+            spinner.classList.add('active');
+            errorMsg.classList.remove('active');
+            resultsCard.classList.remove('active');
+            resultsContainer.innerHTML = '';
+
+            const formData = new FormData();
+            formData.append('audio', selectedFile);
+            formData.append('model', modelSelect.value);
+            formData.append('num_speakers', speakerSelect.value);
+
+            try {
+                const resp = await fetch('/api/separate', { method: 'POST', body: formData });
+                const data = await resp.json();
+
+                if (!resp.ok) {
+                    throw new Error(data.error || 'Separation failed');
+                }
+
+                // Show metadata
+                resultMeta.textContent = `Model: ${data.model} | Speakers: ${data.num_speakers} | Sample Rate: ${data.sample_rate} Hz`;
+
+                // Create audio players for each speaker
+                for (let i = 0; i < data.files.length; i++) {
+                    const filePath = data.files[i];
+                    const downloadUrl = `/api/download?path=${encodeURIComponent(filePath)}`;
+
+                    const div = document.createElement('div');
+                    div.className = 'result-item';
+                    div.innerHTML = `
+                        <span class="speaker-label">Speaker ${i + 1}</span>
+                        <audio controls src="${downloadUrl}"></audio>
+                        <a class="download-btn" href="${downloadUrl}" download="speaker_${i+1}.wav">Download</a>
+                    `;
+                    resultsContainer.appendChild(div);
+                }
+
+                resultsCard.classList.add('active');
+            } catch (err) {
+                errorMsg.textContent = '❌ ' + err.message;
+                errorMsg.classList.add('active');
+            } finally {
+                spinner.classList.remove('active');
+                separateBtn.disabled = false;
+            }
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,132 @@
+# ──────────────────────────────────────────────
+#  Python
+# ──────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+*.pyd
+*.so
+*.dylib
+*.egg-info/
+*.egg
+.eggs/
+.installed.cfg
+build/
+dist/
+develop-eggs/
+downloads/
+eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.manifest
+*.spec
+.Python
+
+# ──────────────────────────────────────────────
+#  Virtual environments
+# ──────────────────────────────────────────────
+.venv/
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+.env
+
+# ──────────────────────────────────────────────
+#  IDE / Editor / OS
+# ──────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# ──────────────────────────────────────────────
+#  Testing / linting caches
+# ──────────────────────────────────────────────
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.cache/
+.tox/
+.coverage
+.coverage.*
+htmlcov/
+nosetests.xml
+coverage.xml
+*.cover
+.hypothesis/
+.ipynb_checkpoints/
+
+# ──────────────────────────────────────────────
+#  Logs and temp files
+# ──────────────────────────────────────────────
+*.log
+*.log.*
+*.tmp
+*.bak
+training_output*.log
+
+# ──────────────────────────────────────────────
+#  Training artifacts / checkpoints
+# ──────────────────────────────────────────────
+**/checkpoints/
+**/runs/
+**/wandb/
+**/outputs/
+**/artifacts/
+*.pt
+*.pth
+
+# ──────────────────────────────────────────────
+#  Audio files (generated / large)
+# ──────────────────────────────────────────────
+*.wav
+*.mp3
+*.flac
+
+# ──────────────────────────────────────────────
+#  Data directories
+# ──────────────────────────────────────────────
+**/data/
+**/dprnn2/
+
+# ──────────────────────────────────────────────
+#  Output / result directories
+# ──────────────────────────────────────────────
+**/separated_output/
+**/training_results/
+**/my_results*/
+**/my_separated_audio/
+**/phase2_results/
+**/test_*/
+**/debug_test/
+**/output/
+
+# ──────────────────────────────────────────────
+#  C++ build artifacts (gokul)
+# ──────────────────────────────────────────────
+**/libtorch/
+**/libtorch.zip
+**/third_party/
+*.o
+*.a
+compile_commands.json
+
+# ──────────────────────────────────────────────
+#  Frontend / served files (not needed in repo)
+# ──────────────────────────────────────────────
+# (index.html IS tracked; ignore generated assets)
+
+# ──────────────────────────────────────────────
+#  Jupyter
+# ──────────────────────────────────────────────
+.python-version

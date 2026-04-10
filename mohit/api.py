@@ -4,9 +4,11 @@ import os
 import sys
 import tempfile
 import torch
-import torchaudio
 import numpy as np
 import soundfile as sf
+import matplotlib
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
 from pathlib import Path
 from fastapi import APIRouter, UploadFile, File, Form
 from fastapi.responses import JSONResponse
@@ -81,15 +83,21 @@ def _get_model(device: str = "cpu"):
 
 
 def _load_audio(path: str, target_sr: int = 8000, max_duration: float = 30.0):
-    wav, sr = torchaudio.load(path)
-    if wav.shape[0] > 1:
-        wav = wav.mean(dim=0, keepdim=True)
+    wav, sr = sf.read(path, dtype="float32")
+    # Convert to mono if stereo
+    if wav.ndim > 1:
+        wav = wav.mean(axis=1)
+    # Resample if needed
     if sr != target_sr:
-        wav = torchaudio.functional.resample(wav, sr, target_sr)
+        from scipy.signal import resample_poly
+        from math import gcd
+        g = gcd(target_sr, sr)
+        wav = resample_poly(wav, target_sr // g, sr // g).astype(np.float32)
+    # Truncate
     max_samples = int(target_sr * max_duration)
-    if wav.shape[1] > max_samples:
-        wav = wav[:, :max_samples]
-    return wav.squeeze(0), target_sr
+    if len(wav) > max_samples:
+        wav = wav[:max_samples]
+    return torch.from_numpy(wav), target_sr
 
 
 @router.post("/separate")
@@ -120,6 +128,7 @@ async def separate(
             masks = model(mag_input)  # (1, n_sources, F, T)
 
         output_files = []
+        separated_np = []
         n_sources = min(masks.shape[1], num_speakers)
         for i in range(n_sources):
             est_mag = masks[0, i] * mag
@@ -128,15 +137,58 @@ async def separate(
             peak = np.abs(audio_np).max()
             if peak > 0:
                 audio_np = audio_np / peak * 0.95
+            separated_np.append(audio_np)
             out_path = tmp_path + f"_speaker_{i+1}.wav"
             sf.write(out_path, audio_np, 8000, subtype="PCM_16")
             output_files.append(out_path)
+
+        # Generate visualization
+        viz_path = tmp_path + "_separation_visualization.png"
+        _generate_visualization(waveform.cpu().numpy(), separated_np, 8000, viz_path)
 
         return {
             "model": "RCNN",
             "num_speakers": n_sources,
             "files": output_files,
             "sample_rate": 8000,
+            "visualization": viz_path,
         }
     finally:
         os.unlink(tmp_path)
+
+
+def _generate_visualization(mixture, sources, sr, out_path):
+    """Create waveform + spectrogram visualization."""
+    n_sources = len(sources)
+    fig, axes = plt.subplots(n_sources + 1, 2, figsize=(16, 4 * (n_sources + 1)))
+
+    t = np.arange(len(mixture)) / sr
+    axes[0, 0].plot(t, mixture, color='#3498db', linewidth=0.5)
+    axes[0, 0].set_title("Mixture \u2014 Waveform", fontsize=12, fontweight='bold')
+    axes[0, 0].set_xlabel("Time (s)")
+    axes[0, 0].set_ylabel("Amplitude")
+    axes[0, 0].set_xlim(0, t[-1])
+
+    axes[0, 1].specgram(mixture, Fs=sr, cmap='magma')
+    axes[0, 1].set_title("Mixture \u2014 Spectrogram", fontsize=12, fontweight='bold')
+    axes[0, 1].set_xlabel("Time (s)")
+    axes[0, 1].set_ylabel("Frequency (Hz)")
+
+    colors = ['#e74c3c', '#2ecc71', '#f39c12', '#9b59b6']
+    for i, src in enumerate(sources):
+        t_s = np.arange(len(src)) / sr
+        c = colors[i % len(colors)]
+        axes[i+1, 0].plot(t_s, src, color=c, linewidth=0.5)
+        axes[i+1, 0].set_title(f"Source {i+1} \u2014 Waveform", fontsize=12, fontweight='bold')
+        axes[i+1, 0].set_xlabel("Time (s)")
+        axes[i+1, 0].set_ylabel("Amplitude")
+        axes[i+1, 0].set_xlim(0, t_s[-1])
+
+        axes[i+1, 1].specgram(src, Fs=sr, cmap='magma')
+        axes[i+1, 1].set_title(f"Source {i+1} \u2014 Spectrogram", fontsize=12, fontweight='bold')
+        axes[i+1, 1].set_xlabel("Time (s)")
+        axes[i+1, 1].set_ylabel("Frequency (Hz)")
+
+    plt.tight_layout()
+    fig.savefig(out_path, dpi=120, bbox_inches='tight')
+    plt.close(fig)

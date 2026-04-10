@@ -53,20 +53,28 @@ def _import_module_from_path(name: str, path: str):
     spec.loader.exec_module(mod)
     return mod
 
-anirudh_api = _import_module_from_path("anirudh_api", str(ROOT / "anirudh" / "cocktail_separation" / "api.py"))
-mayank_api = _import_module_from_path("mayank_api", str(ROOT / "mayank" / "api.py"))
-mohit_api = _import_module_from_path("mohit_api", str(ROOT / "mohit" / "api.py"))
-gokul_api = _import_module_from_path("gokul_api", str(ROOT / "gokul" / "api.py"))
+_apis = {}
 
-anirudh_router = anirudh_api.router
-mayank_router = mayank_api.router
-mohit_router = mohit_api.router
-gokul_router = gokul_api.router
+_api_configs = {
+    "anirudh": ("anirudh_api", str(ROOT / "anirudh" / "cocktail_separation" / "api.py")),
+    "mayank": ("mayank_api", str(ROOT / "mayank" / "api.py")),
+    "mohit": ("mohit_api", str(ROOT / "mohit" / "api.py")),
+    "gokul": ("gokul_api", str(ROOT / "gokul" / "api.py")),
+}
 
-app.include_router(anirudh_router)
-app.include_router(mayank_router)
-app.include_router(mohit_router)
-app.include_router(gokul_router)
+for _key, (_mod_name, _mod_path) in _api_configs.items():
+    try:
+        _mod = _import_module_from_path(_mod_name, _mod_path)
+        _apis[_key] = _mod
+        app.include_router(_mod.router)
+        print(f"  ✔ Loaded {_key} API")
+    except Exception as exc:
+        print(f"  ⚠ Skipped {_key} API: {exc}")
+
+anirudh_api = _apis.get("anirudh")
+mayank_api = _apis.get("mayank")
+mohit_api = _apis.get("mohit")
+gokul_api = _apis.get("gokul")
 
 
 # ───── Unified separation endpoint ─────
@@ -77,44 +85,30 @@ async def separate(
     num_speakers: int = Form(2),
 ):
     """Unified endpoint that delegates to the selected model."""
-    from fastapi.testclient import TestClient
 
-    # Map model names to internal endpoints
-    route_map = {
-        "dprnn": "/anirudh/separate",
-        "convtasnet": "/mayank/separate",
-        "convtasnet_cpp": "/gokul/separate",
-        "rcnn": "/mohit/separate",
+    # Map model names to API modules
+    model_api_map = {
+        "dprnn": anirudh_api,
+        "convtasnet": mayank_api,
+        "rcnn": mohit_api,
+        "convtasnet_cpp": gokul_api,
     }
 
-    target = route_map.get(model)
-    if not target:
+    api_mod = model_api_map.get(model)
+    if api_mod is None:
+        available = [k for k, v in model_api_map.items() if v is not None]
         return JSONResponse(
             status_code=400,
-            content={"error": f"Unknown model '{model}'. Options: {list(route_map.keys())}"},
+            content={"error": f"Model '{model}' is not available. Available: {available}"},
         )
 
     # Forward to the specific router
     content = await audio.read()
     await audio.seek(0)
 
-    # Direct function dispatch instead of internal HTTP call
-    if model == "dprnn":
-        fn = anirudh_api.separate
-        audio.file.seek(0)
-        result = await fn(audio=audio, num_speakers=num_speakers)
-    elif model == "convtasnet":
-        fn = mayank_api.separate
-        audio.file.seek(0)
-        result = await fn(audio=audio, num_speakers=num_speakers)
-    elif model == "rcnn":
-        fn = mohit_api.separate
-        audio.file.seek(0)
-        result = await fn(audio=audio, num_speakers=num_speakers)
-    elif model == "convtasnet_cpp":
-        fn = gokul_api.separate
-        audio.file.seek(0)
-        result = await fn(audio=audio, num_speakers=num_speakers)
+    # Direct function dispatch
+    audio.file.seek(0)
+    result = await api_mod.separate(audio=audio, num_speakers=num_speakers)
 
     if isinstance(result, JSONResponse):
         return result
@@ -128,11 +122,13 @@ async def separate(
 
 @app.get("/api/download")
 async def download_file(path: str):
-    """Download a separated audio file by its temp path."""
+    """Download a separated audio or image file by its temp path."""
     p = Path(path)
     if not p.exists() or not p.is_file():
         return JSONResponse(status_code=404, content={"error": "File not found"})
-    return FileResponse(str(p), media_type="audio/wav", filename=p.name)
+    media_map = {".wav": "audio/wav", ".png": "image/png", ".jpg": "image/jpeg"}
+    media_type = media_map.get(p.suffix.lower(), "application/octet-stream")
+    return FileResponse(str(p), media_type=media_type, filename=p.name)
 
 
 @app.get("/", response_class=HTMLResponse)

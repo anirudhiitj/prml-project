@@ -6,3 +6,6 @@ soundfile
 tensorboard
 tqdm
 matplotlib
+fastapi
+uvicorn
+python-multipart

@@ -64,8 +64,7 @@ def train_one_epoch(model, dataloader, optimizer, scaler, stft_helper, device,
     total_si_snr = 0
     num_batches = 0
 
-    pbar = tqdm(dataloader, desc=f"Train Epoch {epoch}", leave=False)
-    for batch_idx, batch in enumerate(pbar):
+    for batch_idx, batch in enumerate(dataloader):
         mixture_mag = batch['mixture_mag'].to(device)   # (B, F, T)
         source1_mag = batch['source1_mag'].to(device)
         source2_mag = batch['source2_mag'].to(device)
@@ -114,20 +113,17 @@ def train_one_epoch(model, dataloader, optimizer, scaler, stft_helper, device,
         # Compute SI-SNR for logging (with waveform reconstruction)
         if use_waveform_loss:
             with torch.no_grad():
-                # Use the best permutation's SI-SNR (match PIT logic)
+                # Per-sample best-permutation SI-SNR (matches uPIT logic)
                 si_snr_p1 = (si_snr(est_sources[:, 0], source1_wav) +
-                             si_snr(est_sources[:, 1], source2_wav)).mean().item() / 2
+                             si_snr(est_sources[:, 1], source2_wav)) / 2  # (batch,)
                 si_snr_p2 = (si_snr(est_sources[:, 0], source2_wav) +
-                             si_snr(est_sources[:, 1], source1_wav)).mean().item() / 2
-                avg_si_snr = max(si_snr_p1, si_snr_p2)
-                total_si_snr += avg_si_snr
-
-        pbar.set_postfix(loss=f"{loss.item():.4f}")
+                             si_snr(est_sources[:, 1], source1_wav)) / 2  # (batch,)
+                best_si_snr = torch.max(si_snr_p1, si_snr_p2)  # (batch,)
+                total_si_snr += best_si_snr.mean().item()
 
     avg_loss = total_loss / max(num_batches, 1)
     avg_si_snr_val = total_si_snr / max(num_batches, 1) if use_waveform_loss else 0
 
-    global_step = epoch * len(dataloader)
     writer.add_scalar('Train/Loss', avg_loss, epoch)
     writer.add_scalar('Train/SI-SNR', avg_si_snr_val, epoch)
 
@@ -143,8 +139,7 @@ def validate(model, dataloader, stft_helper, device, epoch, writer,
     total_si_snr = 0
     num_batches = 0
 
-    pbar = tqdm(dataloader, desc=f"Val Epoch {epoch}", leave=False)
-    for batch in pbar:
+    for batch in dataloader:
         mixture_mag = batch['mixture_mag'].to(device)
         source1_mag = batch['source1_mag'].to(device)
         source2_mag = batch['source2_mag'].to(device)
@@ -168,20 +163,19 @@ def validate(model, dataloader, stft_helper, device, epoch, writer,
             tgt_sources = torch.stack([source1_wav, source2_wav], dim=1)
 
             loss = pit_loss(est_sources, tgt_sources, loss_fn=negative_si_snr)
-            # Use the best permutation's SI-SNR (match PIT logic)
+            # Per-sample best-permutation SI-SNR (matches uPIT logic)
             si_snr_p1 = (si_snr(est_sources[:, 0], source1_wav) +
-                         si_snr(est_sources[:, 1], source2_wav)).mean().item() / 2
+                         si_snr(est_sources[:, 1], source2_wav)) / 2  # (batch,)
             si_snr_p2 = (si_snr(est_sources[:, 0], source2_wav) +
-                         si_snr(est_sources[:, 1], source1_wav)).mean().item() / 2
-            avg_si_snr = max(si_snr_p1, si_snr_p2)
-            total_si_snr += avg_si_snr
+                         si_snr(est_sources[:, 1], source1_wav)) / 2  # (batch,)
+            best_si_snr = torch.max(si_snr_p1, si_snr_p2)  # (batch,)
+            total_si_snr += best_si_snr.mean().item()
         else:
             target_mags = torch.stack([source1_mag, source2_mag], dim=1)
             loss = pit_mse_loss(masks, target_mags, mixture_mag.unsqueeze(1))
 
         total_loss += loss.item()
         num_batches += 1
-        pbar.set_postfix(loss=f"{loss.item():.4f}")
 
     avg_loss = total_loss / max(num_batches, 1)
     avg_si_snr_val = total_si_snr / max(num_batches, 1) if use_waveform_loss else 0

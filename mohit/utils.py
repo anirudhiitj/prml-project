@@ -145,7 +145,12 @@ def si_snr(estimated, target, eps=1e-8):
 
 
 def negative_si_snr(estimated, target, eps=1e-8):
-    """Negative SI-SNR for use as a loss (lower is better)."""
+    """Negative SI-SNR for use as a loss (lower is better). Returns per-sample values."""
+    return -si_snr(estimated, target, eps)
+
+
+def negative_si_snr_mean(estimated, target, eps=1e-8):
+    """Negative SI-SNR averaged over batch (for backward compat)."""
     return -si_snr(estimated, target, eps).mean()
 
 
@@ -155,15 +160,16 @@ def negative_si_snr(estimated, target, eps=1e-8):
 
 def pit_loss(estimated_sources, target_sources, loss_fn=negative_si_snr):
     """
-    Permutation Invariant Training loss.
+    Utterance-level Permutation Invariant Training (uPIT) loss.
 
-    Tries all assignments of estimated sources to target sources
-    and picks the one with the lowest total loss.
+    Finds the best permutation independently for EACH sample in the batch,
+    then averages the minimum-permutation loss.
 
     Args:
         estimated_sources: (batch, n_sources, samples)
         target_sources:    (batch, n_sources, samples)
-        loss_fn:           pairwise loss function(estimated, target) → scalar
+        loss_fn:           pairwise loss function(estimated, target) → (batch,)
+                           Must return per-sample losses, NOT a scalar mean.
 
     Returns:
         loss: scalar — the minimum-permutation loss averaged over the batch
@@ -171,21 +177,23 @@ def pit_loss(estimated_sources, target_sources, loss_fn=negative_si_snr):
     batch_size, n_sources, _ = estimated_sources.shape
     perms = list(permutations(range(n_sources)))
 
-    losses = []
+    # Compute per-sample loss for each permutation
+    perm_losses = []
     for perm in perms:
         perm_loss = 0
         for est_idx, tgt_idx in enumerate(perm):
+            # loss_fn must return (batch,) per-sample losses
             perm_loss = perm_loss + loss_fn(
                 estimated_sources[:, est_idx, :],
                 target_sources[:, tgt_idx, :],
             )
-        losses.append(perm_loss)
+        perm_losses.append(perm_loss)  # (batch,)
 
-    # Stack and take minimum across permutations
-    losses = torch.stack(losses, dim=0)  # (n_perms,)
-    min_loss = losses.min(dim=0).values
+    # Stack: (n_perms, batch) and take min over permutations per sample
+    perm_losses = torch.stack(perm_losses, dim=0)  # (n_perms, batch)
+    min_loss_per_sample = perm_losses.min(dim=0).values  # (batch,)
 
-    return min_loss
+    return min_loss_per_sample.mean()
 
 
 # ──────────────────────────────────────────────

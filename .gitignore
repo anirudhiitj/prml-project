@@ -89,6 +89,10 @@ training_output*.log
 !anirudh/cocktail_separation/checkpoints/
 !anirudh/cocktail_separation/checkpoints/*.part*
 
+# Allow split parts to be committed (mohit's checkpoints)
+!mohit/checkpoints/
+!mohit/checkpoints/*.part*
+
 # ──────────────────────────────────────────────
 #  Audio files (generated / large)
 # ──────────────────────────────────────────────

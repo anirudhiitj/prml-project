@@ -16,9 +16,29 @@ import torch
 import torchaudio
 import numpy as np
 import matplotlib.pyplot as plt
+from pathlib import Path
 
 from model import RCNNSeparator, RCNNSeparatorWaveform
 from utils import STFTHelper, load_audio, save_audio, normalize_waveform
+
+
+def ensure_checkpoint(checkpoint_path: str) -> str:
+    """If checkpoint doesn't exist but .part* files do, merge them first."""
+    target = Path(checkpoint_path)
+    if target.exists():
+        return str(target)
+
+    parts = sorted(target.parent.glob(target.name + ".part*"),
+                   key=lambda p: int(p.suffix.lstrip(".part")))
+    if not parts:
+        raise FileNotFoundError(f"Checkpoint not found: {checkpoint_path}")
+
+    print(f"Merging {len(parts)} parts -> {target.name} ...")
+    with open(target, "wb") as out:
+        for part in parts:
+            out.write(part.read_bytes())
+    print(f"  Merged: {target.name} ({target.stat().st_size / 1024**2:.1f} MB)")
+    return str(target)
 
 
 def separate_audio(model, stft_helper, input_path, output_dir, device,
@@ -173,7 +193,8 @@ def main():
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f"Using device: {device}")
 
-    # Load checkpoint
+    # Load checkpoint (auto-merge from parts if needed)
+    args.checkpoint = ensure_checkpoint(args.checkpoint)
     print(f"Loading checkpoint: {args.checkpoint}")
     ckpt = torch.load(args.checkpoint, map_location=device, weights_only=False)
     model_args = ckpt.get('args', {})

@@ -1,6 +1,7 @@
 # RCNN-Based Cocktail Party Audio Source Separation
 source /mnt/raid/rl_gaming/RL4VLM2/cocktail_separation/dprnn2/bin/activate
 
+
 ## Documentation & Concept Guide
 
 ---
@@ -443,7 +444,7 @@ tensorboard --logdir ./runs --port 6006
 ### Step 5: Run Inference
 
 ```bash
-CUDA_VISIBLE_DEVICES=3 python inference.py \
+CUDA_VISIBLE_DEVICES=7 python inference.py \
     --input path/to/mixed_audio.wav \
     --checkpoint ./checkpoints/best_model.pt \
     --output_dir ./separated_output

@@ -2,6 +2,8 @@
 
 This document explains every concept used in this project in plain language. Each section answers three questions: **What is it? Why do we need it? How does it fit in our code?**
 
+
+Mixture → STFT → |magnitude| → RCNN → sigmoid mask → mask × |magnitude| → iSTFT(with mixture phase) → output
 ---
 
 ## Table of Contents

@@ -8,6 +8,8 @@ Provides two dataset classes:
 
 import os
 import random
+import numpy as np
+import soundfile as sf
 import torch
 import torchaudio
 from torch.utils.data import Dataset
@@ -19,6 +21,9 @@ from utils import STFTHelper
 class LibriMixDataset(Dataset):
     """
     On-the-fly 2-speaker mixture dataset built from LibriSpeech.
+
+    Scans the LibriSpeech directory directly (no torchaudio dataset class),
+    loads FLAC files with soundfile to avoid torchcodec dependency.
 
     Each sample returns:
         mixture_mag:  (freq_bins, time_frames) — magnitude STFT of the mix
@@ -47,64 +52,74 @@ class LibriMixDataset(Dataset):
         self.num_samples = num_samples
         self.stft_helper = STFTHelper(n_fft=n_fft, hop_length=hop_length)
 
-        # Download / load LibriSpeech
-        print(f"Loading LibriSpeech subset: {subset} ...")
-        self.dataset = torchaudio.datasets.LIBRISPEECH(
-            root=root_dir, url=subset, download=True
-        )
+        # Scan LibriSpeech directory directly — avoids torchaudio torchcodec dependency
+        subset_dir = os.path.join(root_dir, "LibriSpeech", subset)
+        print(f"Scanning LibriSpeech subset at: {subset_dir} ...")
 
-        # Group utterances by speaker ID
-        self.speaker_to_indices = defaultdict(list)
-        for idx in range(len(self.dataset)):
-            # LibriSpeech item: (waveform, sr, transcript, speaker_id, chapter_id, utterance_id)
-            _, _, _, speaker_id, _, _ = self.dataset[idx]
-            self.speaker_to_indices[speaker_id].append(idx)
+        self.speaker_to_files = defaultdict(list)
+        for speaker_id in sorted(os.listdir(subset_dir)):
+            speaker_path = os.path.join(subset_dir, speaker_id)
+            if not os.path.isdir(speaker_path):
+                continue
+            for chapter_id in os.listdir(speaker_path):
+                chapter_path = os.path.join(speaker_path, chapter_id)
+                if not os.path.isdir(chapter_path):
+                    continue
+                for fname in os.listdir(chapter_path):
+                    if fname.endswith('.flac'):
+                        self.speaker_to_files[speaker_id].append(
+                            os.path.join(chapter_path, fname)
+                        )
 
-        self.speaker_ids = list(self.speaker_to_indices.keys())
+        self.speaker_ids = list(self.speaker_to_files.keys())
+        total_files = sum(len(v) for v in self.speaker_to_files.values())
         assert len(self.speaker_ids) >= 2, "Need at least 2 speakers!"
-        print(f"Found {len(self.speaker_ids)} speakers, {len(self.dataset)} utterances.")
+        print(f"Found {len(self.speaker_ids)} speakers, {total_files} utterances.")
 
         # Pre-generate random pairs for determinism
         rng = random.Random(seed)
         self.pairs = []
         for _ in range(num_samples):
             spk1, spk2 = rng.sample(self.speaker_ids, 2)
-            idx1 = rng.choice(self.speaker_to_indices[spk1])
-            idx2 = rng.choice(self.speaker_to_indices[spk2])
+            file1 = rng.choice(self.speaker_to_files[spk1])
+            file2 = rng.choice(self.speaker_to_files[spk2])
             snr_offset = rng.uniform(-5, 5)  # dB offset for mixing
-            self.pairs.append((idx1, idx2, snr_offset))
+            self.pairs.append((file1, file2, snr_offset))
 
     def __len__(self):
         return self.num_samples
 
-    def _load_and_preprocess(self, idx):
-        """Load, resample, and trim/pad a single utterance."""
-        waveform, sr, _, _, _, _ = self.dataset[idx]
-        waveform = waveform.squeeze(0)  # (samples,)
+    def _load_and_preprocess(self, filepath):
+        """Load FLAC with soundfile, resample, and trim/pad."""
+        data, sr = sf.read(filepath, dtype='float32')
 
-        # Resample
+        # Mono
+        if data.ndim > 1:
+            data = data.mean(axis=1)
+
+        waveform = torch.from_numpy(data)  # (samples,)
+
+        # Resample if needed
         if sr != self.target_sr:
             resampler = torchaudio.transforms.Resample(sr, self.target_sr)
-            waveform = resampler(waveform)
+            waveform = resampler(waveform.unsqueeze(0)).squeeze(0)
 
         # Trim or pad to fixed length
         if waveform.shape[0] >= self.segment_length:
-            # Random crop
             start = random.randint(0, waveform.shape[0] - self.segment_length)
             waveform = waveform[start:start + self.segment_length]
         else:
-            # Zero-pad
             pad_len = self.segment_length - waveform.shape[0]
             waveform = torch.nn.functional.pad(waveform, (0, pad_len))
 
         return waveform
 
     def __getitem__(self, index):
-        idx1, idx2, snr_offset = self.pairs[index]
+        file1, file2, snr_offset = self.pairs[index]
 
         # Load individual sources
-        source1 = self._load_and_preprocess(idx1)
-        source2 = self._load_and_preprocess(idx2)
+        source1 = self._load_and_preprocess(file1)
+        source2 = self._load_and_preprocess(file2)
 
         # Normalize sources
         source1 = source1 / (source1.abs().max() + 1e-8)

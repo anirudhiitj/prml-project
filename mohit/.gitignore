@@ -6,7 +6,9 @@ __pycache__/
 # PyTorch
 *.pth
 *.pt
-checkpoints/
+checkpoints/*
+# Allow split checkpoint parts for GitHub
+!checkpoints/*.part*
 
 # Tensoboard logs
 runs/

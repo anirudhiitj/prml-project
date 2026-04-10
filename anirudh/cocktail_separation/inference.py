@@ -51,7 +51,24 @@ def load_audio(audio_path: str, sample_rate: int = 16000, max_duration: float = 
     return waveform
 
 
+def _auto_merge_checkpoint(checkpoint_path: str) -> None:
+    """If .pt is missing but .part* files exist, merge them first."""
+    target = Path(checkpoint_path)
+    if target.exists():
+        return
+    parts = sorted(target.parent.glob(target.name + ".part*"),
+                   key=lambda p: int(p.suffix.lstrip(".part")))
+    if not parts:
+        return
+    print(f"🔧 Auto-merging {len(parts)} checkpoint parts → {target.name}")
+    with open(target, "wb") as out:
+        for part in parts:
+            out.write(part.read_bytes())
+    print(f"✅ Merged: {target.name} ({target.stat().st_size / 1024**2:.1f} MB)")
+
+
 def load_model(checkpoint_path: str, num_speakers: int, device: str = "cuda") -> torch.nn.Module:
+    _auto_merge_checkpoint(checkpoint_path)
     print(f"🔄 Loading model from: {checkpoint_path}")
 
     ckpt = torch.load(checkpoint_path, map_location=device)

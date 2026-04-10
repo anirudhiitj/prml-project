@@ -78,13 +78,16 @@ training_output*.log
 # ──────────────────────────────────────────────
 #  Training artifacts / checkpoints
 # ──────────────────────────────────────────────
-**/checkpoints/
+# Ignore checkpoint dirs — EXCEPT anirudh's split parts
 **/runs/
 **/wandb/
 **/outputs/
 **/artifacts/
 *.pt
 *.pth
+# Allow split parts to be committed (anirudh's checkpoints)
+!anirudh/cocktail_separation/checkpoints/
+!anirudh/cocktail_separation/checkpoints/*.part*
 
 # ──────────────────────────────────────────────
 #  Audio files (generated / large)

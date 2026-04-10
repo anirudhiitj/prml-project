@@ -29,10 +29,30 @@ CHECKPOINTS = {
 _loaded_models = {}
 
 
+def _auto_merge_checkpoint(checkpoint_path: Path) -> None:
+    if checkpoint_path.exists():
+        return
+    parts = sorted(checkpoint_path.parent.glob(checkpoint_path.name + ".part*"),
+                   key=lambda p: int(p.suffix.lstrip(".part")))
+    if not parts:
+        return
+    print(f"🔧 Auto-merging {len(parts)} parts → {checkpoint_path.name}")
+    with open(checkpoint_path, "wb") as out:
+        for part in parts:
+            out.write(part.read_bytes())
+    print(f"✅ Merged: {checkpoint_path.name} ({checkpoint_path.stat().st_size / 1024**2:.1f} MB)")
+
+
 def _get_model(num_speakers: int, device: str = "cpu"):
     key_map = {2: "2spk", 3: "3spk", 5: "5spk"}
     key = key_map.get(num_speakers)
-    if key is None or not CHECKPOINTS.get(key, Path("_")).exists():
+    if key is None or not CHECKPOINTS.get(key, Path("_")).parent.exists():
+        return None, f"No checkpoint for {num_speakers} speakers"
+
+    ckpt_path = CHECKPOINTS.get(key, Path("_"))
+    _auto_merge_checkpoint(ckpt_path)
+
+    if not ckpt_path.exists():
         return None, f"No checkpoint for {num_speakers} speakers"
 
     if key not in _loaded_models:

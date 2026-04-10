@@ -67,7 +67,10 @@ venv.bak/
 data/mixtures/
 data/
 dprnn2/
-checkpoints/
+# checkpoints dir: ignore .pt files but allow split parts
+checkpoints/*.pt
+checkpoints/*.pth
+!checkpoints/*.part*
 training_results/
 test_*/
 debug_test/

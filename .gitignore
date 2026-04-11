@@ -90,6 +90,7 @@ training_output*.log
 !anirudh/cocktail_separation/checkpoints/*.part*
 
 !mayank/checkpoints/
+!mayank/checkpoints/*.pt
 # Allow split parts to be committed (mohit's checkpoints)
 !mohit/checkpoints/
 !mohit/checkpoints/*.part*

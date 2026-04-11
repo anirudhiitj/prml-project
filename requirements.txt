@@ -13,3 +13,8 @@ matplotlib>=3.7.0
 asteroid
 librosa
 accelerate
+fastapi
+python-multipart
+tqdm
+torchmetrics
+tensorboard

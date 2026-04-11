@@ -2,9 +2,7 @@ torch>=2.0.0
 torchaudio>=2.0.0
 accelerate>=0.20.0
 soundfile
-librosa
 tqdm
 torchmetrics
-pyyaml
 tensorboard
 asteroid

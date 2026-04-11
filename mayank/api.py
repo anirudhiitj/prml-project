@@ -50,15 +50,21 @@ def _get_model(n_src: int, device: str = "cpu"):
 
 
 def _load_audio(path: str, sample_rate: int = 8000, max_duration: float = 30.0):
-    wav, sr = torchaudio.load(path)
-    if wav.shape[0] > 1:
-        wav = wav.mean(dim=0, keepdim=True)
+    wav, sr = sf.read(path, dtype="float32")
+    # Convert to mono if stereo
+    if wav.ndim > 1:
+        wav = wav.mean(axis=1)
+    # Resample if needed
     if sr != sample_rate:
-        wav = torchaudio.functional.resample(wav, sr, sample_rate)
+        from scipy.signal import resample_poly
+        from math import gcd
+        g = gcd(sample_rate, sr)
+        wav = resample_poly(wav, sample_rate // g, sr // g).astype(np.float32)
+    # Truncate
     max_samples = int(sample_rate * max_duration)
-    if wav.shape[1] > max_samples:
-        wav = wav[:, :max_samples]
-    return wav
+    if len(wav) > max_samples:
+        wav = wav[:max_samples]
+    return torch.from_numpy(wav).unsqueeze(0)  # (1, T)
 
 
 @router.post("/separate")

@@ -6,6 +6,8 @@ import tempfile
 import torch
 import numpy as np
 import soundfile as sf
+import matplotlib
+matplotlib.use("Agg")
 from pathlib import Path
 from fastapi import APIRouter, UploadFile, File, Form
 from fastapi.responses import JSONResponse
@@ -117,11 +119,33 @@ async def separate(
             sf.write(out_path, audio_np, 16000, subtype="PCM_16")
             output_files.append(out_path)
 
+        # Generate spectrogram image
+        spectrogram_path = tmp_path + "_spectrogram.png"
+        try:
+            # Import from inference.py in same folder
+            import importlib.util as _ilu
+            _spec = _ilu.spec_from_file_location(
+                "anirudh_inference",
+                str(BASE_DIR / "inference.py")
+            )
+            _inf = _ilu.module_from_spec(_spec)
+            _spec.loader.exec_module(_inf)
+
+            metrics = _inf.compute_metrics(estimates, mixture)
+            _inf.generate_spectrogram_image(
+                mixture, estimates, metrics,
+                spectrogram_path, sample_rate=16000
+            )
+        except Exception as e:
+            print(f"⚠️  Spectrogram generation failed: {e}")
+            spectrogram_path = None
+
         return {
             "model": "DPRNN-TasNet",
             "num_speakers": num_speakers,
             "files": output_files,
             "sample_rate": 16000,
+            "spectrogram": spectrogram_path,
         }
     finally:
         os.unlink(tmp_path)

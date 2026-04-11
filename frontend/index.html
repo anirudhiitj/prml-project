@@ -1,102 +1,231 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="dark">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Cocktail Party Speech Separation</title>
     <style>
-      * {
+      /* ── CSS Variables ───────────────────────────────────────── */
+      :root {
+        --accent:       #6c63ff;
+        --accent-hover: #5a52e0;
+        --accent-dim:   #6c63ff22;
+        --radius-card:  14px;
+        --radius-sm:    8px;
+        --transition:   0.22s cubic-bezier(0.4, 0, 0.2, 1);
+      }
+
+      [data-theme="dark"] {
+        --bg:           #0f0f1a;
+        --bg-card:      #1a1a2e;
+        --bg-input:     #12121f;
+        --bg-meta:      #16162a;
+        --border:       #2a2a40;
+        --border-input: #333;
+        --text:         #e0e0e0;
+        --text-sub:     #888;
+        --text-muted:   #666;
+        --text-heading: #fff;
+        --text-card-h:  #ccc;
+        --label:        #999;
+        --err-bg:       #2d1a1a;
+        --err-border:   #5a2a2a;
+        --err-text:     #ff6b6b;
+        --spinner-ring: #333;
+        --disabled-bg:  #333;
+        --disabled-txt: #666;
+        --toast-bg:     #1e2a1e;
+        --toast-border: #2a5a2a;
+        --toast-text:   #6ee86e;
+      }
+
+      [data-theme="light"] {
+        --bg:           #f0f0f8;
+        --bg-card:      #ffffff;
+        --bg-input:     #f5f5fc;
+        --bg-meta:      #eeeef8;
+        --border:       #d4d4e8;
+        --border-input: #c8c8dc;
+        --text:         #1a1a2e;
+        --text-sub:     #555570;
+        --text-muted:   #888899;
+        --text-heading: #0a0a18;
+        --text-card-h:  #333348;
+        --label:        #55556a;
+        --err-bg:       #fff0f0;
+        --err-border:   #ffb3b3;
+        --err-text:     #c0392b;
+        --spinner-ring: #d0d0e8;
+        --disabled-bg:  #d8d8e8;
+        --disabled-txt: #999;
+        --toast-bg:     #f0fff0;
+        --toast-border: #88cc88;
+        --toast-text:   #227722;
+      }
+
+      /* ── Reset ───────────────────────────────────────────────── */
+      *, *::before, *::after {
         box-sizing: border-box;
         margin: 0;
         padding: 0;
       }
+
+      /* ── Base ────────────────────────────────────────────────── */
+      html { scroll-behavior: smooth; }
       body {
-        font-family: "Segoe UI", system-ui, sans-serif;
-        background: #0f0f1a;
-        color: #e0e0e0;
+        font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+        background: var(--bg);
+        color: var(--text);
         min-height: 100vh;
+        transition: background var(--transition), color var(--transition);
+        -webkit-font-smoothing: antialiased;
       }
 
+      /* ── Layout ──────────────────────────────────────────────── */
       .container {
         max-width: 900px;
         margin: 0 auto;
-        padding: 32px 20px;
+        padding: 32px 20px 60px;
       }
 
+      /* ── Header ──────────────────────────────────────────────── */
+      .header {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        position: relative;
+        margin-bottom: 6px;
+      }
       h1 {
         text-align: center;
-        font-size: 1.8rem;
-        margin-bottom: 8px;
-        color: #fff;
+        font-size: 1.85rem;
+        color: var(--text-heading);
+        letter-spacing: -0.02em;
+        transition: color var(--transition);
       }
       .subtitle {
         text-align: center;
-        color: #888;
-        margin-bottom: 32px;
+        color: var(--text-sub);
+        margin-bottom: 36px;
         font-size: 0.95rem;
+        transition: color var(--transition);
       }
 
+      /* ── Theme Toggle ────────────────────────────────────────── */
+      .theme-toggle {
+        position: absolute;
+        right: 0;
+        top: 50%;
+        transform: translateY(-50%);
+        background: var(--bg-card);
+        border: 1px solid var(--border);
+        border-radius: 50px;
+        padding: 6px 14px;
+        cursor: pointer;
+        font-size: 0.82rem;
+        color: var(--text-sub);
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        transition: background var(--transition), border-color var(--transition),
+                    color var(--transition), transform 0.15s, box-shadow 0.15s;
+        white-space: nowrap;
+        user-select: none;
+      }
+      .theme-toggle:hover {
+        border-color: var(--accent);
+        color: var(--accent);
+        box-shadow: 0 0 0 3px var(--accent-dim);
+        transform: translateY(-50%) scale(1.04);
+      }
+      .theme-toggle:active { transform: translateY(-50%) scale(0.97); }
+      .theme-toggle .toggle-icon { font-size: 1rem; transition: transform 0.4s; }
+      .theme-toggle:hover .toggle-icon { transform: rotate(20deg); }
+
+      /* ── Cards ───────────────────────────────────────────────── */
       .card {
-        background: #1a1a2e;
-        border-radius: 12px;
+        background: var(--bg-card);
+        border-radius: var(--radius-card);
         padding: 28px;
-        margin-bottom: 24px;
-        border: 1px solid #2a2a40;
+        margin-bottom: 20px;
+        border: 1px solid var(--border);
+        transition: background var(--transition), border-color var(--transition),
+                    box-shadow var(--transition);
       }
-
+      .card:hover {
+        box-shadow: 0 4px 24px rgba(108, 99, 255, 0.07);
+      }
       .card h2 {
-        font-size: 1.1rem;
-        margin-bottom: 16px;
-        color: #ccc;
+        font-size: 1.05rem;
+        margin-bottom: 18px;
+        color: var(--text-card-h);
+        font-weight: 600;
+        transition: color var(--transition);
       }
 
-      /* Upload area */
+      /* ── Drop Zone ───────────────────────────────────────────── */
       .drop-zone {
-        border: 2px dashed #444;
+        border: 2px dashed var(--border-input);
         border-radius: 10px;
-        padding: 40px 20px;
+        padding: 44px 20px;
         text-align: center;
         cursor: pointer;
-        transition: all 0.2s;
-        background: #12121f;
+        transition: border-color var(--transition), background var(--transition),
+                    transform 0.15s;
+        background: var(--bg-input);
+        outline: none;
       }
       .drop-zone:hover,
       .drop-zone.dragover {
-        border-color: #6c63ff;
-        background: #1c1c35;
+        border-color: var(--accent);
+        background: var(--accent-dim);
+        transform: scale(1.005);
+      }
+      .drop-zone:focus-visible {
+        border-color: var(--accent);
+        box-shadow: 0 0 0 3px var(--accent-dim);
       }
       .drop-zone p {
-        color: #999;
-        margin-bottom: 8px;
+        color: var(--text-sub);
+        margin-bottom: 6px;
+        transition: color var(--transition);
+      }
+      .drop-zone .hint {
+        font-size: 0.8rem;
+        color: var(--text-muted);
+        transition: color var(--transition);
       }
       .drop-zone .icon {
-        font-size: 2.5rem;
-        margin-bottom: 8px;
+        font-size: 2.6rem;
+        margin-bottom: 10px;
+        display: block;
+        transition: transform 0.3s;
       }
+      .drop-zone:hover .icon,
+      .drop-zone.dragover .icon { transform: scale(1.15) translateY(-3px); }
       .drop-zone .filename {
-        color: #6c63ff;
+        color: var(--accent);
         font-weight: 600;
-        margin-top: 8px;
+        margin-top: 10px;
+        font-size: 0.9rem;
+        word-break: break-all;
       }
-      .drop-zone input[type="file"] {
-        display: none;
-      }
+      .drop-zone input[type="file"] { display: none; }
 
-      /* Audio preview */
+      /* ── Audio Preview ───────────────────────────────────────── */
       .audio-preview {
-        margin-top: 12px;
+        margin-top: 14px;
         width: 100%;
+        animation: fadeSlideIn 0.3s ease;
       }
-      .audio-preview audio {
-        width: 100%;
-      }
+      .audio-preview audio { width: 100%; border-radius: 6px; }
 
-      /* Controls */
+      /* ── Controls ────────────────────────────────────────────── */
       .controls {
         display: flex;
         gap: 16px;
         flex-wrap: wrap;
-        align-items: end;
+        align-items: flex-end;
       }
       .control-group {
         flex: 1;
@@ -104,196 +233,352 @@
       }
       .control-group label {
         display: block;
-        font-size: 0.85rem;
-        color: #999;
-        margin-bottom: 6px;
+        font-size: 0.82rem;
+        color: var(--label);
+        margin-bottom: 7px;
+        font-weight: 500;
+        letter-spacing: 0.01em;
+        transition: color var(--transition);
       }
       .control-group select {
         width: 100%;
         padding: 10px 12px;
-        background: #12121f;
-        border: 1px solid #333;
-        border-radius: 8px;
-        color: #e0e0e0;
+        background: var(--bg-input);
+        border: 1px solid var(--border-input);
+        border-radius: var(--radius-sm);
+        color: var(--text);
         font-size: 0.95rem;
         cursor: pointer;
+        transition: border-color var(--transition), background var(--transition),
+                    box-shadow 0.15s, color var(--transition);
+        appearance: none;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%236c63ff' stroke-width='1.8' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+        background-repeat: no-repeat;
+        background-position: right 12px center;
+        padding-right: 36px;
       }
       .control-group select:focus {
-        border-color: #6c63ff;
+        border-color: var(--accent);
         outline: none;
+        box-shadow: 0 0 0 3px var(--accent-dim);
       }
+      .control-group select:hover { border-color: var(--accent); }
 
+      /* ── Buttons ─────────────────────────────────────────────── */
       .btn {
-        padding: 12px 32px;
+        padding: 11px 30px;
         border: none;
-        border-radius: 8px;
-        font-size: 1rem;
+        border-radius: var(--radius-sm);
+        font-size: 0.97rem;
         font-weight: 600;
         cursor: pointer;
-        transition: all 0.2s;
-        min-width: 160px;
+        transition: background var(--transition), transform 0.12s,
+                    box-shadow 0.15s, opacity var(--transition);
+        min-width: 150px;
+        position: relative;
+        overflow: hidden;
+        letter-spacing: 0.01em;
       }
       .btn-primary {
-        background: #6c63ff;
+        background: var(--accent);
         color: #fff;
+        box-shadow: 0 2px 12px rgba(108, 99, 255, 0.3);
       }
-      .btn-primary:hover {
-        background: #5a52e0;
+      .btn-primary:hover:not(:disabled) {
+        background: var(--accent-hover);
+        transform: translateY(-1px);
+        box-shadow: 0 4px 18px rgba(108, 99, 255, 0.45);
       }
+      .btn-primary:active:not(:disabled) { transform: translateY(0); }
       .btn-primary:disabled {
-        background: #444;
+        background: var(--disabled-bg);
+        color: var(--disabled-txt);
         cursor: not-allowed;
-        color: #888;
+        box-shadow: none;
       }
 
-      /* Spinner */
+      /* Ripple */
+      .btn .ripple {
+        position: absolute;
+        border-radius: 50%;
+        background: rgba(255,255,255,0.3);
+        transform: scale(0);
+        animation: rippleAnim 0.55s linear;
+        pointer-events: none;
+      }
+      @keyframes rippleAnim {
+        to { transform: scale(4); opacity: 0; }
+      }
+
+      /* ── Progress Bar ────────────────────────────────────────── */
+      .progress-bar-wrap {
+        height: 3px;
+        background: var(--border);
+        border-radius: 2px;
+        overflow: hidden;
+        margin-top: 14px;
+        display: none;
+        transition: background var(--transition);
+      }
+      .progress-bar-wrap.active { display: block; }
+      .progress-bar {
+        height: 100%;
+        background: var(--accent);
+        border-radius: 2px;
+        animation: indeterminate 1.5s ease-in-out infinite;
+        transform-origin: left;
+      }
+      @keyframes indeterminate {
+        0%   { transform: scaleX(0)   translateX(0%); }
+        50%  { transform: scaleX(0.6) translateX(80%); }
+        100% { transform: scaleX(0)   translateX(200%); }
+      }
+
+      /* ── Spinner ─────────────────────────────────────────────── */
       .spinner {
         display: none;
         text-align: center;
-        padding: 20px;
+        padding: 28px;
+        animation: fadeSlideIn 0.25s ease;
       }
-      .spinner.active {
-        display: block;
-      }
-      .spinner::after {
-        content: "";
+      .spinner.active { display: block; }
+      .spinner-ring {
         display: inline-block;
-        width: 32px;
-        height: 32px;
-        border: 3px solid #333;
-        border-top-color: #6c63ff;
+        width: 36px;
+        height: 36px;
+        border: 3px solid var(--spinner-ring);
+        border-top-color: var(--accent);
         border-radius: 50%;
-        animation: spin 0.8s linear infinite;
+        animation: spin 0.75s cubic-bezier(0.5, 0.1, 0.5, 0.9) infinite;
+        transition: border-color var(--transition);
       }
-      @keyframes spin {
-        to {
-          transform: rotate(360deg);
-        }
-      }
+      @keyframes spin { to { transform: rotate(360deg); } }
       .spinner-text {
-        color: #999;
-        margin-top: 8px;
-        font-size: 0.9rem;
+        color: var(--text-sub);
+        margin-top: 12px;
+        font-size: 0.88rem;
+        transition: color var(--transition);
       }
 
-      /* Results */
-      .results {
-        display: none;
-      }
+      /* ── Results ─────────────────────────────────────────────── */
+      .results { display: none; }
       .results.active {
         display: block;
+        animation: fadeSlideIn 0.35s ease;
       }
+
       .result-item {
         display: flex;
         align-items: center;
-        gap: 16px;
-        padding: 16px;
-        background: #12121f;
-        border-radius: 8px;
-        margin-bottom: 12px;
-        border: 1px solid #2a2a40;
+        gap: 14px;
+        padding: 14px 16px;
+        background: var(--bg-input);
+        border-radius: var(--radius-sm);
+        margin-bottom: 10px;
+        border: 1px solid var(--border);
+        transition: background var(--transition), border-color var(--transition),
+                    box-shadow var(--transition), transform 0.15s;
+        animation: fadeSlideIn 0.3s ease both;
+      }
+      .result-item:hover {
+        border-color: var(--accent);
+        box-shadow: 0 2px 12px var(--accent-dim);
+        transform: translateX(2px);
       }
       .result-item .speaker-label {
-        background: #6c63ff;
+        background: var(--accent);
         color: #fff;
-        padding: 6px 14px;
+        padding: 5px 13px;
         border-radius: 6px;
-        font-weight: 600;
-        font-size: 0.85rem;
+        font-weight: 700;
+        font-size: 0.82rem;
         white-space: nowrap;
+        letter-spacing: 0.03em;
       }
-      .result-item audio {
-        flex: 1;
-      }
-      .result-item .download-btn {
+      .result-item audio { flex: 1; min-width: 0; }
+      .download-btn {
         background: none;
-        border: 1px solid #6c63ff;
-        color: #6c63ff;
-        padding: 6px 14px;
+        border: 1px solid var(--accent);
+        color: var(--accent);
+        padding: 6px 13px;
         border-radius: 6px;
         cursor: pointer;
-        font-size: 0.85rem;
+        font-size: 0.82rem;
         text-decoration: none;
         white-space: nowrap;
+        font-weight: 500;
+        transition: background var(--transition), transform 0.12s, box-shadow 0.15s;
       }
-      .result-item .download-btn:hover {
-        background: #6c63ff22;
+      .download-btn:hover {
+        background: var(--accent-dim);
+        transform: translateY(-1px);
+        box-shadow: 0 2px 8px var(--accent-dim);
       }
 
       .result-meta {
-        padding: 12px 16px;
-        background: #16162a;
-        border-radius: 8px;
-        font-family: monospace;
-        font-size: 0.85rem;
-        color: #aaa;
-        margin-bottom: 12px;
+        padding: 10px 16px;
+        background: var(--bg-meta);
+        border-radius: var(--radius-sm);
+        font-family: "Cascadia Code", "Consolas", monospace;
+        font-size: 0.82rem;
+        color: var(--label);
+        margin-bottom: 14px;
+        letter-spacing: 0.01em;
+        transition: background var(--transition), color var(--transition);
       }
 
+      /* ── Error ───────────────────────────────────────────────── */
       .error-msg {
         display: none;
-        padding: 12px 16px;
-        background: #2d1a1a;
-        border: 1px solid #5a2a2a;
-        border-radius: 8px;
-        color: #ff6b6b;
+        padding: 13px 16px;
+        background: var(--err-bg);
+        border: 1px solid var(--err-border);
+        border-radius: var(--radius-sm);
+        color: var(--err-text);
         margin-top: 12px;
+        font-size: 0.9rem;
+        transition: background var(--transition), border-color var(--transition),
+                    color var(--transition);
       }
       .error-msg.active {
         display: block;
+        animation: shake 0.4s ease;
+      }
+      @keyframes shake {
+        0%, 100% { transform: translateX(0); }
+        20%       { transform: translateX(-6px); }
+        40%       { transform: translateX(6px); }
+        60%       { transform: translateX(-4px); }
+        80%       { transform: translateX(4px); }
       }
 
-      /* Model descriptions */
+      /* ── Toast ───────────────────────────────────────────────── */
+      .toast {
+        position: fixed;
+        bottom: 28px;
+        left: 50%;
+        transform: translateX(-50%) translateY(20px);
+        background: var(--toast-bg);
+        border: 1px solid var(--toast-border);
+        color: var(--toast-text);
+        padding: 10px 22px;
+        border-radius: 50px;
+        font-size: 0.88rem;
+        font-weight: 500;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.25s, transform 0.25s;
+        z-index: 1000;
+        white-space: nowrap;
+      }
+      .toast.show {
+        opacity: 1;
+        transform: translateX(-50%) translateY(0);
+      }
+
+      /* ── Vis / Spectrogram sections ──────────────────────────── */
+      .vis-section {
+        margin-top: 20px;
+        border-top: 1px solid var(--border);
+        padding-top: 18px;
+        transition: border-color var(--transition);
+      }
+      .vis-section h3 {
+        font-size: 0.92rem;
+        color: var(--text-card-h);
+        margin-bottom: 12px;
+        font-weight: 600;
+        transition: color var(--transition);
+      }
+      .vis-img {
+        width: 100%;
+        border-radius: var(--radius-sm);
+        border: 1px solid var(--border);
+        cursor: zoom-in;
+        transition: border-color var(--transition), box-shadow 0.2s, transform 0.2s;
+        display: block;
+      }
+      .vis-img:hover {
+        box-shadow: 0 4px 24px rgba(108, 99, 255, 0.18);
+        transform: scale(1.005);
+      }
+      .vis-actions { margin-top: 10px; text-align: right; }
+
+      /* ── Model info ──────────────────────────────────────────── */
       .model-info {
-        font-size: 0.8rem;
-        color: #666;
+        font-size: 0.79rem;
+        color: var(--text-muted);
         margin-top: 6px;
         min-height: 1.2em;
+        transition: color var(--transition);
+      }
+
+      /* ── Animations ──────────────────────────────────────────── */
+      @keyframes fadeSlideIn {
+        from { opacity: 0; transform: translateY(10px); }
+        to   { opacity: 1; transform: translateY(0); }
+      }
+
+      /* ── Responsive ──────────────────────────────────────────── */
+      @media (max-width: 560px) {
+        h1 { font-size: 1.4rem; }
+        .header { flex-direction: column; gap: 12px; }
+        .theme-toggle { position: static; transform: none; }
+        .theme-toggle:hover { transform: scale(1.04); }
+        .theme-toggle:active { transform: scale(0.97); }
+        .controls { flex-direction: column; }
+        .btn { min-width: 100%; }
+        .result-item { flex-wrap: wrap; }
+        .result-item audio { width: 100%; }
       }
     </style>
   </head>
   <body>
+    <!-- Toast -->
+    <div class="toast" id="toast"></div>
+
     <div class="container">
-      <h1>🎧 Cocktail Party Speech Separation</h1>
-      <p class="subtitle">
-        Upload a mixed audio file and separate individual speakers
-      </p>
+      <!-- Header -->
+      <div class="header">
+        <h1>🎧 Cocktail Party Speech Separation</h1>
+        <button class="theme-toggle" id="themeToggle" aria-label="Toggle theme">
+          <span class="toggle-icon" id="toggleIcon">☀️</span>
+          <span id="toggleLabel">Light mode</span>
+        </button>
+      </div>
+      <p class="subtitle">Upload a mixed audio file and separate individual speakers</p>
 
       <!-- Upload -->
       <div class="card">
         <h2>1. Upload Audio</h2>
-        <div class="drop-zone" id="dropZone">
-          <div class="icon">📁</div>
-          <p>Drag & drop your audio file here, or click to browse</p>
-          <p style="font-size: 0.8rem; color: #666">
-            Supports WAV, MP3, FLAC, OGG
-          </p>
+        <div class="drop-zone" id="dropZone" tabindex="0" role="button" aria-label="Click or drag to upload audio">
+          <span class="icon" id="dropIcon">📁</span>
+          <p>Drag &amp; drop your audio file here, or click to browse</p>
+          <p class="hint">Supports WAV, MP3, FLAC, OGG</p>
           <input type="file" id="fileInput" accept="audio/*" />
           <div class="filename" id="fileName"></div>
         </div>
-        <div class="audio-preview" id="audioPreview" style="display: none">
+        <div class="audio-preview" id="audioPreview" style="display:none">
           <audio id="inputAudio" controls></audio>
         </div>
       </div>
 
       <!-- Settings -->
       <div class="card">
-        <h2>2. Choose Model & Settings</h2>
+        <h2>2. Choose Model &amp; Settings</h2>
         <div class="controls">
           <div class="control-group">
-            <label>Model</label>
+            <label for="modelSelect">Model</label>
             <select id="modelSelect">
               <option value="dprnn" selected>DPRNN-TasNet (Anirudh)</option>
               <option value="convtasnet">Conv-TasNet (Mayank)</option>
               <option value="convtasnet_cpp">Conv-TasNet C++ (Gokul)</option>
               <option value="rcnn">RCNN (Mohit)</option>
             </select>
-            <div class="model-info" id="modelInfo">
-              Dual-Path RNN with learned encoder/decoder. 16kHz.
-            </div>
+            <div class="model-info" id="modelInfo">Dual-Path RNN with learned encoder/decoder. 16kHz.</div>
           </div>
           <div class="control-group">
-            <label>Number of Speakers</label>
+            <label for="speakerSelect">Number of Speakers</label>
             <select id="speakerSelect">
               <option value="2" selected>2 Speakers</option>
               <option value="3">3 Speakers</option>
@@ -301,17 +586,20 @@
             </select>
           </div>
           <button class="btn btn-primary" id="separateBtn" disabled>
-            Separate
+            ✦ Separate
           </button>
+        </div>
+
+        <!-- Progress bar (under the controls) -->
+        <div class="progress-bar-wrap" id="progressWrap">
+          <div class="progress-bar"></div>
         </div>
       </div>
 
       <!-- Loading -->
       <div class="spinner" id="spinner">
-        <div></div>
-        <div class="spinner-text">
-          Separating speakers... This may take a moment.
-        </div>
+        <div class="spinner-ring"></div>
+        <div class="spinner-text" id="spinnerText">Separating speakers…</div>
       </div>
 
       <!-- Error -->
@@ -326,43 +614,124 @@
     </div>
 
     <script>
-      const dropZone = document.getElementById("dropZone");
-      const fileInput = document.getElementById("fileInput");
-      const fileName = document.getElementById("fileName");
-      const audioPreview = document.getElementById("audioPreview");
-      const inputAudio = document.getElementById("inputAudio");
-      const modelSelect = document.getElementById("modelSelect");
-      const speakerSelect = document.getElementById("speakerSelect");
-      const separateBtn = document.getElementById("separateBtn");
-      const spinner = document.getElementById("spinner");
-      const errorMsg = document.getElementById("errorMsg");
-      const resultsCard = document.getElementById("resultsCard");
+      /* ── DOM refs ──────────────────────────────────────── */
+      const dropZone       = document.getElementById("dropZone");
+      const fileInput      = document.getElementById("fileInput");
+      const fileName       = document.getElementById("fileName");
+      const dropIcon       = document.getElementById("dropIcon");
+      const audioPreview   = document.getElementById("audioPreview");
+      const inputAudio     = document.getElementById("inputAudio");
+      const modelSelect    = document.getElementById("modelSelect");
+      const speakerSelect  = document.getElementById("speakerSelect");
+      const separateBtn    = document.getElementById("separateBtn");
+      const spinner        = document.getElementById("spinner");
+      const spinnerText    = document.getElementById("spinnerText");
+      const progressWrap   = document.getElementById("progressWrap");
+      const errorMsg       = document.getElementById("errorMsg");
+      const resultsCard    = document.getElementById("resultsCard");
       const resultsContainer = document.getElementById("resultsContainer");
-      const resultMeta = document.getElementById("resultMeta");
-      const modelInfo = document.getElementById("modelInfo");
+      const resultMeta     = document.getElementById("resultMeta");
+      const modelInfo      = document.getElementById("modelInfo");
+      const themeToggle    = document.getElementById("themeToggle");
+      const toggleIcon     = document.getElementById("toggleIcon");
+      const toggleLabel    = document.getElementById("toggleLabel");
+      const toast          = document.getElementById("toast");
 
       let selectedFile = null;
 
-      const modelDescriptions = {
-        dprnn: "Dual-Path RNN with learned encoder/decoder. 16kHz.",
-        convtasnet: "Convolutional TasNet using Asteroid library. 8kHz.",
-        convtasnet_cpp: "Conv-TasNet implemented in C++ with libtorch. 8kHz.",
-        rcnn: "Recurrent CNN — conv encoder + BiLSTM + conv decoder. 8kHz.",
-      };
+      /* ── Theme ─────────────────────────────────────────── */
+      const savedTheme = localStorage.getItem("theme") || "dark";
+      applyTheme(savedTheme);
 
+      themeToggle.addEventListener("click", () => {
+        const current = document.documentElement.getAttribute("data-theme");
+        applyTheme(current === "dark" ? "light" : "dark");
+      });
+
+      function applyTheme(theme) {
+        document.documentElement.setAttribute("data-theme", theme);
+        localStorage.setItem("theme", theme);
+        if (theme === "light") {
+          toggleIcon.textContent = "🌙";
+          toggleLabel.textContent = "Dark mode";
+        } else {
+          toggleIcon.textContent = "☀️";
+          toggleLabel.textContent = "Light mode";
+        }
+      }
+
+      /* ── Toast ─────────────────────────────────────────── */
+      let toastTimer;
+      function showToast(msg, duration = 3000) {
+        clearTimeout(toastTimer);
+        toast.textContent = msg;
+        toast.classList.add("show");
+        toastTimer = setTimeout(() => toast.classList.remove("show"), duration);
+      }
+
+      /* ── Ripple on button click ────────────────────────── */
+      separateBtn.addEventListener("click", function(e) {
+        const rect = this.getBoundingClientRect();
+        const rip  = document.createElement("span");
+        const size = Math.max(rect.width, rect.height);
+        rip.className = "ripple";
+        rip.style.cssText = `width:${size}px;height:${size}px;left:${e.clientX - rect.left - size/2}px;top:${e.clientY - rect.top - size/2}px`;
+        this.appendChild(rip);
+        rip.addEventListener("animationend", () => rip.remove());
+      });
+
+      /* ── Model descriptions ────────────────────────────── */
+      const modelDescriptions = {
+        dprnn:         "Dual-Path RNN with learned encoder/decoder. 16kHz.",
+        convtasnet:    "Convolutional TasNet using Asteroid library. 8kHz.",
+        convtasnet_cpp:"Conv-TasNet implemented in C++ with libtorch. 8kHz.",
+        rcnn:          "Recurrent CNN — conv encoder + BiLSTM + conv decoder. 8kHz.",
+      };
       modelSelect.addEventListener("change", () => {
         modelInfo.textContent = modelDescriptions[modelSelect.value] || "";
       });
 
-      // Drag & drop
+      /* ── Spinner cycling text ──────────────────────────── */
+      const spinnerMessages = [
+        "Separating speakers…",
+        "Running model inference…",
+        "Applying source separation…",
+        "Almost done…",
+      ];
+      let spinnerInterval;
+      function startSpinnerText() {
+        let idx = 0;
+        spinnerText.textContent = spinnerMessages[0];
+        spinnerInterval = setInterval(() => {
+          idx = (idx + 1) % spinnerMessages.length;
+          spinnerText.style.opacity = 0;
+          setTimeout(() => {
+            spinnerText.textContent = spinnerMessages[idx];
+            spinnerText.style.opacity = 1;
+          }, 200);
+        }, 2800);
+        spinnerText.style.transition = "opacity 0.2s";
+      }
+      function stopSpinnerText() { clearInterval(spinnerInterval); }
+
+      /* ── File icon helper ──────────────────────────────── */
+      function iconForFile(name) {
+        const ext = name.split(".").pop().toLowerCase();
+        return { wav: "🎵", mp3: "🎶", flac: "💿", ogg: "📻" }[ext] || "🔊";
+      }
+
+      /* ── Drag & Drop ───────────────────────────────────── */
       dropZone.addEventListener("click", () => fileInput.click());
+      dropZone.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" || e.key === " ") { e.preventDefault(); fileInput.click(); }
+      });
       dropZone.addEventListener("dragover", (e) => {
         e.preventDefault();
         dropZone.classList.add("dragover");
       });
-      dropZone.addEventListener("dragleave", () =>
-        dropZone.classList.remove("dragover"),
-      );
+      dropZone.addEventListener("dragleave", (e) => {
+        if (!dropZone.contains(e.relatedTarget)) dropZone.classList.remove("dragover");
+      });
       dropZone.addEventListener("drop", (e) => {
         e.preventDefault();
         dropZone.classList.remove("dragover");
@@ -373,27 +742,40 @@
       });
 
       function handleFile(file) {
+        // Validate type
+        if (!file.type.startsWith("audio/")) {
+          showError("Please upload an audio file (WAV, MP3, FLAC, OGG).");
+          return;
+        }
         selectedFile = file;
-        fileName.textContent =
-          file.name + " (" + (file.size / 1024 / 1024).toFixed(2) + " MB)";
+        dropIcon.textContent = iconForFile(file.name);
+        fileName.textContent = file.name + " — " + (file.size / 1024 / 1024).toFixed(2) + " MB";
         separateBtn.disabled = false;
 
-        // Preview
         const url = URL.createObjectURL(file);
         inputAudio.src = url;
         audioPreview.style.display = "block";
 
-        // Reset results
         resultsCard.classList.remove("active");
         errorMsg.classList.remove("active");
       }
 
-      // Separate button
+      /* ── Error helper ──────────────────────────────────── */
+      function showError(msg) {
+        errorMsg.textContent = "❌ " + msg;
+        errorMsg.classList.remove("active");
+        void errorMsg.offsetWidth; // reflow to re-trigger animation
+        errorMsg.classList.add("active");
+      }
+
+      /* ── Separate ──────────────────────────────────────── */
       separateBtn.addEventListener("click", async () => {
         if (!selectedFile) return;
 
         separateBtn.disabled = true;
         spinner.classList.add("active");
+        progressWrap.classList.add("active");
+        startSpinnerText();
         errorMsg.classList.remove("active");
         resultsCard.classList.remove("active");
         resultsContainer.innerHTML = "";
@@ -404,56 +786,75 @@
         formData.append("num_speakers", speakerSelect.value);
 
         try {
-          const resp = await fetch("/api/separate", {
-            method: "POST",
-            body: formData,
-          });
+          const resp = await fetch("/api/separate", { method: "POST", body: formData });
           const data = await resp.json();
 
-          if (!resp.ok) {
-            throw new Error(data.error || "Separation failed");
-          }
+          if (!resp.ok) throw new Error(data.error || "Separation failed");
 
-          // Show metadata
-          resultMeta.textContent = `Model: ${data.model} | Speakers: ${data.num_speakers} | Sample Rate: ${data.sample_rate} Hz`;
+          resultMeta.textContent =
+            `Model: ${data.model}  ·  Speakers: ${data.num_speakers}  ·  Sample Rate: ${data.sample_rate} Hz`;
 
-          // Create audio players for each speaker
+          // Audio players — staggered animation
           for (let i = 0; i < data.files.length; i++) {
-            const filePath = data.files[i];
-            const downloadUrl = `/api/download?path=${encodeURIComponent(filePath)}`;
-
+            const downloadUrl = `/api/download?path=${encodeURIComponent(data.files[i])}`;
             const div = document.createElement("div");
             div.className = "result-item";
+            div.style.animationDelay = `${i * 0.07}s`;
             div.innerHTML = `
-                        <span class="speaker-label">Speaker ${i + 1}</span>
-                        <audio controls src="${downloadUrl}"></audio>
-                        <a class="download-btn" href="${downloadUrl}" download="speaker_${i + 1}.wav">Download</a>
-                    `;
+              <span class="speaker-label">Speaker ${i + 1}</span>
+              <audio controls src="${downloadUrl}"></audio>
+              <a class="download-btn" href="${downloadUrl}" download="speaker_${i + 1}.wav">⬇ Download</a>
+            `;
             resultsContainer.appendChild(div);
           }
 
-          // Show visualization image if returned (RCNN model)
+          // Visualization (RCNN)
           if (data.visualization) {
-            const vizUrl = `/api/download?path=${encodeURIComponent(data.visualization)}`;
-            const vizDiv = document.createElement("div");
-            vizDiv.style.cssText = "margin-top: 20px; text-align: center;";
-            vizDiv.innerHTML = `
-                        <h3 style="color: #ccc; margin-bottom: 12px; font-size: 1rem;">Separation Visualization</h3>
-                        <img src="${vizUrl}" alt="Separation visualization" style="max-width: 100%; border-radius: 8px; border: 1px solid #2a2a40;">
-                        <div style="margin-top: 8px;"><a class="download-btn" href="${vizUrl}" download="separation_visualization.png">Download Image</a></div>
-                    `;
-            resultsContainer.appendChild(vizDiv);
+            appendVisSection(
+              resultsContainer,
+              data.visualization,
+              "Separation Visualization",
+              "separation_visualization.png"
+            );
+          }
+
+          // Spectrogram (Anirudh DPRNN)
+          if (data.spectrogram) {
+            appendVisSection(
+              resultsContainer,
+              data.spectrogram,
+              "Waveforms &amp; Spectrograms",
+              "separation_spectrogram.png"
+            );
           }
 
           resultsCard.classList.add("active");
+          setTimeout(() => resultsCard.scrollIntoView({ behavior: "smooth", block: "start" }), 80);
+          showToast("✓ Separation complete!");
         } catch (err) {
-          errorMsg.textContent = "❌ " + err.message;
-          errorMsg.classList.add("active");
+          showError(err.message);
         } finally {
           spinner.classList.remove("active");
+          progressWrap.classList.remove("active");
+          stopSpinnerText();
           separateBtn.disabled = false;
         }
       });
+
+      /* ── Helper: append image section ─────────────────── */
+      function appendVisSection(container, filePath, title, downloadName) {
+        const url = `/api/download?path=${encodeURIComponent(filePath)}`;
+        const sec = document.createElement("div");
+        sec.className = "vis-section";
+        sec.innerHTML = `
+          <h3>${title}</h3>
+          <img class="vis-img" src="${url}" alt="${title}" onclick="window.open(this.src, '_blank')">
+          <div class="vis-actions">
+            <a class="download-btn" href="${url}" download="${downloadName}">⬇ Download Image</a>
+          </div>
+        `;
+        container.appendChild(sec);
+      }
     </script>
   </body>
 </html>

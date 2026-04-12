@@ -1,0 +1,1 @@
+/usr/bin/c++  -D_GLIBCXX_USE_CXX11_ABI=1 CMakeFiles/gui.dir/src/gui.cpp.o -o gui  -lgtk-3 -lgdk-3 -lpangocairo-1.0 -lpango-1.0 -lharfbuzz -latk-1.0 -lcairo-gobject -lcairo -lgdk_pixbuf-2.0 -lgio-2.0 -lgobject-2.0 -lglib-2.0 -lpthread -lstdc++fs 

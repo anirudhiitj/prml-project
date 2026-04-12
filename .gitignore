@@ -2,7 +2,8 @@ build/
 libtorch/
 libtorch.zip
 data/
-checkpoints/
+checkpoints/*
+!checkpoints/best_tasnet.pt
 output/
 third_party/
 *.wav

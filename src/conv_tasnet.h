@@ -5,8 +5,8 @@
 // Time-domain audio separation network:
 //   Encoder (1D Conv) → TCN Mask Network → Decoder (Transposed 1D Conv)
 //
-// Default config: N=256, L=16, B=128, H=256, P=3, X=8, R=3, C=2
-// Parameters: ~5.1M
+// Default config: N=512, L=16, B=256, H=512, P=3, X=8, R=3, C=2
+// Parameters: ~8.0M
 // ─────────────────────────────────────────────────────────────────────────────
 #include <torch/torch.h>
 
@@ -61,8 +61,8 @@ TORCH_MODULE(TCN);
 // ── Full Conv-TasNet Model ───────────────────────────────────────────────────
 
 struct ConvTasNetImpl : torch::nn::Module {
-    ConvTasNetImpl(int64_t N=256, int64_t L=16, int64_t B=128,
-                   int64_t H=256, int64_t P=3,  int64_t X=8,
+    ConvTasNetImpl(int64_t N=512, int64_t L=16, int64_t B=256,
+                   int64_t H=416, int64_t P=3,  int64_t X=8,
                    int64_t R=3,   int64_t C=2,  int sr=8000);
 
     /// @param mixture [B, T] or [B, 1, T]

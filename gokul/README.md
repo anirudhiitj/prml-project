@@ -1,539 +1,468 @@
 # Cocktail-Party Speech Separation
 
-**Single-microphone speech separation using Conv-TasNet and Spectrogram U-Net in C++ / LibTorch**
+**End-to-end monaural speech separation using Conv-TasNet — implemented entirely in C++ with LibTorch.**
 
-> PRML Final Project — monaural (single-channel) separation of overlapping speakers into individual clean speech signals.
+> PRML Final Project · Separates a single-channel recording of two overlapping speakers into individual clean speech signals.
 
 ---
 
 ## Table of Contents
 
-1. [Problem Statement](#1-problem-statement)
-2. [Audio Preprocessing](#2-audio-preprocessing)
-3. [Fourier / Time-Frequency Representation](#3-fourier--time-frequency-representation)
-4. [Deep Learning Separation Models](#4-deep-learning-separation-models)
-5. [Training Strategy](#5-training-strategy)
-6. [Evaluation and Results](#6-evaluation-and-results)
-7. [Implementation Guide](#7-implementation-guide)
-8. [Project Narrative for Reports](#8-project-narrative-for-reports)
-9. [Quick Start](#9-quick-start)
-10. [References](#10-references)
+- [Overview](#overview)
+- [Why This Problem](#why-this-problem)
+- [Architecture](#architecture)
+- [Mathematical Foundations](#mathematical-foundations)
+- [Dataset](#dataset)
+- [Training](#training)
+- [Evaluation Metrics](#evaluation-metrics)
+- [Build & Run](#build--run)
+- [GUI Application](#gui-application)
+- [Project Structure](#project-structure)
+- [Results & Expectations](#results--expectations)
+- [References](#references)
 
 ---
 
-## 1. Problem Statement
+## Overview
 
-Given a single mixed audio signal `x(t) = s₁(t) + s₂(t)` with two overlapping speakers, recover the individual signals `ŝ₁(t)` and `ŝ₂(t)`.
+Given a single mixed audio signal **x(t) = s₁(t) + s₂(t)** containing two overlapping speakers, this system recovers the individual source signals **ŝ₁(t)** and **ŝ₂(t)**.
 
-This is the **cocktail party problem** — one of the oldest problems in signal processing. It is ill-posed: one equation, two unknowns. Deep learning makes it tractable by learning statistical priors over speech structure.
+```
+Input:  mixture.wav  (2 speakers talking simultaneously)
+          ↓
+     Conv-TasNet  (8.2M parameters, ~15 dB SI-SNRi)
+          ↓
+Output: source_1.wav  (Speaker A isolated)
+        source_2.wav  (Speaker B isolated)
+```
 
-### Why it matters
-
-- Hearing aids, voice assistants, teleconferencing
-- Preprocessing for ASR in multi-speaker environments
-- Foundational problem connecting signal processing + machine learning
+The entire pipeline — model, training loop, inference, audio I/O, STFT, metrics, and a desktop GUI — is written in **C++17** using LibTorch and libsndfile. No Python is needed at runtime.
 
 ---
 
-## 2. Audio Preprocessing
+## Why This Problem
 
-### Pipeline
+The **cocktail party problem** is one of the most fundamental challenges in signal processing. A single microphone captures a linear superposition of sources — one equation, two unknowns. It is mathematically ill-posed without additional priors.
 
-```
-Raw WAV → Load → Mono conversion → Peak normalization → Silence trimming (VAD)
-```
+Deep learning makes it tractable by learning the statistical structure of speech signals, enabling the network to infer which time-frequency components belong to which speaker.
 
-| Step | What | Why | Implementation |
-|------|------|-----|----------------|
-| **Load** | Read WAV via libsndfile | Standard lossless audio format | `audio::load_wav()` |
-| **Mono** | Average channels to 1 | Monaural separation problem definition | `audio::load_wav()` |
-| **Resample** | Enforce target sample rate (8 kHz) | Consistent temporal resolution; 8 kHz standard for speech separation benchmarks | Validated at load time |
-| **Normalize** | Scale peak to 0.9 | Prevents clipping; gives network consistent amplitude range | `preprocess::normalize()` |
-| **VAD Trim** | Remove leading/trailing silence | Training segments should contain speech, not blank audio | `preprocess::vad_trim()` |
-
-### What we do NOT do (and why)
-
-| Avoided step | Reason |
-|--|--|
-| **Band-pass filtering** | Destroys speech harmonics above the cutoff. The neural network must see full-bandwidth speech to learn separation. |
-| **Aggressive denoising** | Pre-denoising (e.g. spectral subtraction) introduces musical noise artifacts and removes fine spectral detail the model needs. |
-| **Compression / AGC** | Non-linear processing distorts the additive mixture model `x = s₁ + s₂` that the loss function assumes. |
-
-**Principle**: Preprocess for consistency (amplitude, silence), but never for content modification. Let the neural network handle separation.
+**Applications:** hearing aids, voice assistants, teleconferencing, ASR preprocessing in multi-speaker environments.
 
 ---
 
-## 3. Fourier / Time-Frequency Representation
+## Architecture
 
-### Why STFT, not plain FFT?
+### Primary Model: Conv-TasNet
 
-Speech is **non-stationary**: phonemes, pitch, and energy change every 10-30 ms. A single FFT gives one global spectrum across the entire signal — it cannot distinguish speakers who occupy different time-frequency regions.
-
-The **Short-Time Fourier Transform (STFT)** windows the signal into overlapping short frames and computes the DFT of each:
+Conv-TasNet (Luo & Mesgarani, 2019) operates entirely in the **time domain**, bypassing the traditional Short-Time Fourier Transform (STFT) by learning its own encoder and decoder. This removes phase estimation errors inherent in spectrogram-based approaches.
 
 ```
-STFT{x}(t, f) = Σₙ x[n] · w[n - tH] · e^{-j2πfn/N}
-```
-
-This gives a 2D time-frequency representation where each speaker occupies distinct T-F bins, enabling **masking-based separation**.
-
-### STFT Configuration
-
-| Parameter | Value | Rationale |
-|-----------|-------|-----------|
-| Window function | Hann | Best sidelobe suppression for speech; smooth edges reduce spectral leakage |
-| Window size | 256 samples (32 ms @ 8 kHz) | Captures ~3 pitch periods of typical speech (100-300 Hz fundamental) |
-| Hop size | 64 samples (8 ms) | 75% overlap → smooth overlap-add reconstruction |
-| FFT size | 256 | Equal to window → no zero-padding needed at 8 kHz |
-| Frequency bins | 129 (= 256/2 + 1) | One-sided real FFT output |
-
-### Magnitude vs. Complex Features
-
-| Approach | Pros | Cons | Used by |
-|----------|------|------|---------|
-| **Magnitude-only** | Simple, interpretable; most energy info | Loses phase; needs external phase source for reconstruction | U-Net baseline |
-| **Complex (real + imag)** | Complete information; no phase loss | 2× input channels; harder to interpret | (Advanced models) |
-| **Magnitude + phase** | Separable processing | Phase estimation is hard to learn | Hybrid approaches |
-
-**Our design:**
-- **U-Net baseline**: Learns magnitude masks, reuses mixture phase for reconstruction (classical approach)
-- **Conv-TasNet**: Bypasses STFT entirely with learned encoder/decoder (end-to-end)
-
-### Reconstruction: Inverse STFT
-
-```
-x̂[n] = Σₜ IDFT{S(t,f)} · w[n - tH]  /  Σₜ w²[n - tH]
-```
-
-The overlap-add (OLA) method sums windowed IDFT frames. The Hann window + 75% overlap guarantees perfect reconstruction (COLA condition).
-
-**Implementation**: `stft_utils::stft()` and `stft_utils::istft()` in `src/stft.h`.
-
----
-
-## 4. Deep Learning Separation Models
-
-### Architecture Comparison
-
-| | **Conv-TasNet** (main) | **Spectrogram U-Net** (baseline) | SepFormer |
-|---|---|---|---|
-| **Domain** | Time (learned encoder) | STFT spectrogram | Time + attention |
-| **Parameters** | ~5.1M | ~7.8M | ~26M |
-| **SI-SNRi** (WSJ0-2mix) | 15.3 dB | 10-12 dB | 20.4 dB |
-| **LibTorch feasibility** | ✅ Straightforward | ✅ Simple | ⚠️ Complex |
-| **Explainability** | Good (encoder ≈ learned filter bank) | Excellent (STFT masks visible) | Hard |
-| **Implementation effort** | Medium | Low | High |
-
-### Main Model: Conv-TasNet
-
-**Why Conv-TasNet**: Best balance of performance (~15 dB SI-SNRi), parameter efficiency (~5M), and implementation feasibility in LibTorch. The architecture has a clean mathematical story: learned filter bank → temporal convolutional masking → synthesis.
-
-```
-Mixture waveform x[t]
+Mixture waveform x[t]    (1D signal, 8 kHz)
         ↓
-    ┌──────────┐
-    │  Encoder  │   1D Conv (1 → N, kernel L, stride L/2)
-    │  (ReLU)   │   "Learned STFT" — each filter ≈ a frequency band
-    └────┬─────┘
+   ┌───────────┐
+   │  Encoder   │   1D Conv (1 → 512, kernel=16, stride=8)
+   │            │   "Learned STFT" — each of 512 filters ≈ a frequency band
+   └─────┬─────┘
          ↓
-    ┌──────────┐
-    │   TCN     │   R × X stacked dilated depth-separable conv blocks
-    │ Separator │   Exponentially growing receptive field
-    │           │   Global + Channel LayerNorm
-    └────┬─────┘
+   ┌───────────┐
+   │    TCN     │   3 repeats × 8 dilated depth-separable conv blocks
+   │ Separator  │   Exponentially growing receptive field (1,2,4,...,128)
+   │            │   Global + Channel LayerNorm, PReLU activations
+   └─────┬─────┘
          ↓
-    C masks (ReLU)  → element-wise multiply with encoder output
+   2 masks (ReLU) → element-wise multiply with encoder output
          ↓
-    ┌──────────┐
-    │  Decoder  │   Transposed 1D Conv (N → 1, kernel L, stride L/2)
-    │           │   "Learned inverse STFT"
-    └──────────┘
+   ┌───────────┐
+   │  Decoder   │   Transposed 1D Conv (512 → 1, kernel=16, stride=8)
+   │            │   "Learned inverse STFT"
+   └───────────┘
          ↓
-    ŝ₁[t], ŝ₂[t]   separated sources
+   ŝ₁[t], ŝ₂[t]   separated source waveforms
 ```
 
 **Hyperparameters:**
 
-| Symbol | Name | Value | Role |
-|--------|------|-------|------|
-| N | Encoder filters | 256 | Frequency resolution of learned filter bank |
+| Symbol | Name | Value | Purpose |
+|--------|------|-------|---------|
+| N | Encoder filters | 512 | Frequency resolution of learned filter bank |
 | L | Encoder kernel | 16 | Temporal resolution (2 ms @ 8 kHz) |
-| B | Bottleneck channels | 128 | Dimension reduction before TCN |
-| H | Hidden channels | 256 | Capacity of each conv block |
+| B | Bottleneck channels | 256 | Dimensionality reduction before TCN |
+| H | Hidden channels | 416 | Capacity of each separable conv block |
 | P | Depth-wise kernel | 3 | Local temporal context per block |
-| X | Blocks per repeat | 8 | Dilation pattern: 1,2,4,...,128 |
-| R | Repeats | 3 | Total receptive field: R × Σ 2ⁱ × P ≈ 1.5s |
-| C | Speakers | 2 | Number of output masks |
+| X | Blocks per repeat | 8 | Dilation pattern: 1, 2, 4, …, 128 |
+| R | Repeats | 3 | Total receptive field ≈ 1.5 s |
+| C | Number of speakers | 2 | Output masks / separated sources |
+
+**Total parameters:** ~8.2 million
 
 **Key components:**
-- **Global Layer Normalization (gLN)**: Normalizes across both channel and time dimensions. Critical for the bottleneck.
-- **Channel Layer Normalization (cLN)**: Normalizes across channels only. Used inside conv blocks for causal-compatible normalization.
-- **Depth-wise separable convolution**: Factorizes standard convolution into depth-wise (per-channel spatial) + point-wise (1×1 cross-channel). Reduces parameters by ~H/P×.
+- **Depth-wise separable convolution** — factorizes the standard 1D convolution into a per-channel spatial convolution + a 1×1 cross-channel convolution, reducing parameters by a factor of approximately H/P
+- **Global Layer Normalization (gLN)** — normalizes across both channel and time dimensions at the bottleneck
+- **Channel Layer Normalization (cLN)** — normalizes across channels only inside each conv block
 
-### Baseline: Spectrogram U-Net
+### Baseline Model: Spectrogram U-Net
 
-**Why as baseline**: Makes the STFT pipeline explicit and interpretable. Demonstrates the classical masking approach, providing a strong comparison point.
+A classical 4-level encoder-decoder U-Net that operates on STFT magnitude spectrograms. It predicts sigmoid masks in [0, 1] for each speaker, multiplies them with the mixture magnitude, and reconstructs via inverse STFT using the mixture phase.
 
-```
-Mixture magnitude spectrogram |X(t,f)|
-        ↓
-    ┌──────────┐
-    │  Encoder  │   4× (Conv2d 3×3 + BN + ReLU + MaxPool2×2)
-    │  32→64→   │   Progressive downsampling
-    │  128→256  │
-    └────┬─────┘
-         ↓
-    ┌──────────┐
-    │Bottleneck │   Conv2d block at 512 channels
-    └────┬─────┘
-         ↓
-    ┌──────────┐
-    │  Decoder  │   4× (ConvTranspose2d 2×2 + skip cat + Conv2d + BN + ReLU)
-    │  256→128→ │
-    │  64→32    │
-    └────┬─────┘
-         ↓
-    Conv2d 1×1 → sigmoid
-         ↓
-    C masks Mₖ(t,f) ∈ [0,1]
-         ↓
-    ŝₖ = iSTFT( Mₖ · |X| · e^{j∠X} )
-```
-
-**Reconstruction**: Apply each mask to the mixture magnitude, combine with the mixture phase (phase is not learned — a known limitation), then inverse STFT.
+This serves as a comparison point: it demonstrates that **learned representations (Conv-TasNet) outperform hand-designed ones (STFT + magnitude masking)**.
 
 ---
 
-## 5. Training Strategy
+## Mathematical Foundations
 
-### Dataset
+### Short-Time Fourier Transform (STFT)
 
-| | Details |
-|---|---|
-| **Dataset** | Libri2Mix (derived from LibriSpeech) |
-| **Split** | train-360 (~13,900 mixtures), dev (~3,000), test (~3,000) |
-| **Sample rate** | 8 kHz (standard for separation benchmarks) |
-| **Speakers** | 2 overlapping speakers per mixture |
-| **Mode** | `min` — mixtures trimmed to shortest source |
-| **Generation** | `scripts/generate_librimix.sh` |
+Speech is non-stationary — phonemes change every 10–30 ms. The STFT windows the signal into overlapping frames:
 
-### Mixture Creation
+```
+STFT{x}(t, f) = Σₙ x[n] · w[n − tH] · e^{−j2πfn/N}
+```
 
-Libri2Mix handles this automatically:
-1. Sample two random utterances from different LibriSpeech speakers
-2. Apply random relative SNR between speakers
-3. Mix: `x[t] = s₁[t] + s₂[t]` (additive in time domain)
-4. Store CSVs with paths to mixture, source 1, source 2
+| Setting | Value | Rationale |
+|---------|-------|-----------|
+| Window | Hann, 256 samples (32 ms) | Smooth edges reduce spectral leakage |
+| Hop size | 64 samples (8 ms) | 75% overlap → perfect reconstruction (COLA) |
+| FFT size | 256 | Matches window length at 8 kHz |
+| Freq bins | 129 | One-sided real FFT |
 
-### Augmentations
+The U-Net baseline uses the STFT directly. Conv-TasNet replaces it with a learned encoder — and this is one of the core insights of the project.
 
-Applied during training to improve generalization:
+### SI-SNR (Scale-Invariant Signal-to-Noise Ratio)
+
+The primary training objective and evaluation metric:
+
+```
+ŝ = s − mean(s),   ê = e − mean(e)       (zero-mean)
+s_target = (⟨ŝ, ê⟩ / ‖ê‖²) · ê           (optimal rescaling via projection)
+SI-SNR   = 10 · log₁₀( ‖s_target‖² / ‖ŝ − s_target‖² )
+```
+
+SI-SNR is **scale-invariant** — it measures separation quality regardless of amplitude. This aligns with human perception and provides smoother gradients than SDR.
+
+- **0 dB** → error power equals signal power (bad)
+- **10 dB** → signal 10× stronger than error (good)
+- **20 dB** → signal 100× stronger than error (excellent)
+
+### Permutation Invariant Training (PIT)
+
+The network outputs [ŝ₁, ŝ₂] but does not know which output corresponds to which ground-truth speaker. PIT resolves this:
+
+```
+L_PIT = − max( SI-SNR(ŝ₁, s₁) + SI-SNR(ŝ₂, s₂),
+               SI-SNR(ŝ₁, s₂) + SI-SNR(ŝ₂, s₁) )
+```
+
+Both possible speaker-to-output assignments are evaluated. Training uses the one that yields the highest total SI-SNR.
+
+---
+
+## Dataset
+
+**Libri2Mix** (Cosentino et al., 2020), derived from LibriSpeech:
+
+| Split | Mixtures | Purpose |
+|-------|----------|---------|
+| train-360 | 50,800 | Training |
+| dev | 3,000 | Validation (LR scheduling, early stopping) |
+| test | 3,000 | Final evaluation |
+
+- **Sample rate:** 8 kHz (standard for speech separation benchmarks)
+- **Speakers per mixture:** 2
+- **Mode:** `min` — mixtures trimmed to the length of the shortest source
+- **Generation:** `bash scripts/generate_librimix.sh ./data` (requires ~100 GB disk, downloads LibriSpeech and generates all mixtures)
+
+### Audio Preprocessing
+
+```
+Raw WAV → Load (libsndfile) → Mono → Enforce 8 kHz → Peak normalize (0.9) → VAD silence trim
+```
+
+Preprocessing normalizes for consistency but never modifies content. No band-pass filtering, denoising, or compression — these would distort the additive mixture model x = s₁ + s₂ that the loss function assumes.
+
+### Training Augmentations
 
 | Augmentation | Details | Applied to |
 |---|---|---|
-| **Random gain** | ±6 dB uniform | Mix + sources (consistently) |
-| **Gaussian noise** | 20-40 dB SNR | Mixture only |
-| **Circular shift** | ±10% of segment | Mix + sources |
-| **Polarity flip** | 50% probability | Mix + sources |
+| Random gain | ±6 dB uniform | Mix + both sources (consistent) |
+| Gaussian noise | 20–40 dB SNR | Mixture only |
+| Circular shift | ±10% of segment length | Mix + both sources |
+| Polarity flip | 50% probability | Mix + both sources |
 
-### Loss Function
+---
 
-**SI-SNR (Scale-Invariant Signal-to-Noise Ratio):**
+## Training
 
-```
-ŝ = s - mean(s),  ê = e - mean(e)
-
-s_target = (<ŝ, ê> / ||ê||²) · ê
-
-SI-SNR  = 10 · log₁₀( ||s_target||² / ||ŝ - s_target||² )
-```
-
-**Why SI-SNR over SDR**: SI-SNR is scale-invariant — it measures signal quality regardless of amplitude. This aligns with human perception and provides smoother gradients during training.
-
-**PIT (Permutation Invariant Training):**
-
-The network outputs [ŝ₁, ŝ₂] but doesn't know which source is which. PIT solves this:
-
-```
-L_PIT = -max( SI-SNR(ŝ₁,s₁) + SI-SNR(ŝ₂,s₂),
-              SI-SNR(ŝ₁,s₂) + SI-SNR(ŝ₂,s₁) )
-```
-
-We evaluate both orderings and train with the one giving higher total SI-SNR.
-
-**For U-Net baseline**: PIT loss on L1 spectrogram distance (spectral domain PIT).
-
-### Optimizer & Schedule
+### Configuration
 
 | Parameter | Value |
 |---|---|
 | Optimizer | Adam (β₁=0.9, β₂=0.999) |
-| Initial LR | 1 × 10⁻³ |
-| LR schedule | Halve on plateau (patience=3 epochs on val SI-SNR) |
-| Gradient clipping | Max norm 5.0 |
-| Batch size | 4 (8 GB VRAM) or 8+ on servers |
-| Segment length | 4 seconds (32,000 samples @ 8 kHz) |
+| Base LR | 1 × 10⁻³ |
+| LR warmup | Linear over epochs 1–5 |
+| LR schedule | Halve on plateau (patience 5 epochs on val SI-SNR) |
+| Min LR | 1 × 10⁻⁶ |
+| Gradient clipping | Max-norm 5.0 |
+| Batch size | 4 (micro-batch on GPU) |
+| Gradient accumulation | 1–12× (configurable for VRAM-limited GPUs) |
+| Segment length | 32,000 samples (4 seconds @ 8 kHz) |
 | Epochs | 100 |
 
-### Variable-Length Handling
+### Learning Rate Schedule
 
-During training, all segments are cropped/padded to fixed `segment_len` (32000 samples). During inference, the full waveform is processed (padded to encoder stride multiple, then trimmed back).
+1. **Warmup (epochs 1–5):** LR ramps linearly from `base_lr / 5` to `base_lr`
+2. **Plateau (epochs 6+):** LR held until val SI-SNR stalls for 5 consecutive epochs, then halved
+3. **Floor:** LR never drops below 1 × 10⁻⁶
+
+### Checkpointing
+
+| File | When saved | Purpose |
+|---|---|---|
+| `best_tasnet.pt` | New best val SI-SNR | **Use this for inference** |
+| `latest_tasnet.pt` | Every epoch | Crash recovery |
+| `tasnet_epN.pt` | Every 5 epochs | Training history |
+| `final_tasnet.pt` | End of training | Last-epoch model |
+| `*.optim` | With each `.pt` | Optimizer state for resume |
+| `*.meta` | With each `.pt` | Epoch, best SI-SNR, LR |
+
+### Resuming Training
+
+```bash
+./build/train \
+    --model tasnet \
+    --data_dir ./data/Libri2Mix/Libri2Mix/wav8k/min/train-360 \
+    --val_dir  ./data/Libri2Mix/Libri2Mix/wav8k/min/dev \
+    --resume checkpoints/latest_tasnet.pt
+```
+
+All state (model weights, optimizer, LR, epoch counter, best metric) is restored automatically.
 
 ---
 
-## 6. Evaluation and Results
+## Evaluation Metrics
 
-### Objective Metrics
+| Metric | Measures | Range | Target |
+|--------|----------|-------|--------|
+| **SI-SNRi** | Scale-invariant SNR improvement over mixture | −∞ to +∞ dB | > 12 dB |
+| **SDRi** | Signal-to-distortion ratio improvement | −∞ to +∞ dB | > 10 dB |
+| **STOI** | Short-time objective intelligibility | 0 to 1 | > 0.85 |
 
-| Metric | What it measures | Range | Target |
-|--------|-----------------|-------|--------|
-| **SI-SNRi** | Scale-invariant SNR improvement (dB) | -∞ to +∞ | >12 dB |
-| **SDRi** | Signal-to-distortion ratio improvement | -∞ to +∞ | >10 dB |
-| **STOI** | Short-time objective intelligibility | 0 to 1 | >0.85 |
-| **PESQ** | Perceptual quality (requires external tool) | 1 to 5 | >2.5 |
+**SI-SNRi** is the primary metric — it measures how much the separation improves the SNR relative to the raw mixture input.
 
-**SI-SNRi** is the primary metric: it measures how much the separation network improved the SNR relative to the input mixture.
+### Expected Performance
 
-### Figures for Report
-
-| Figure | What to show | Why it impresses |
-|--------|-------------|------------------|
-| **Waveform comparison** | Mixture → separated sources overlaid with ground truth | Visual proof of separation quality |
-| **Spectrogram before/after** | STFT magnitude of mix, separated, and clean | Shows T-F masking in action |
-| **Training loss curve** | Negative SI-SNR vs. epoch for both models | Shows convergence and training stability |
-| **Metric comparison table** | SI-SNRi, SDRi, STOI for Conv-TasNet vs. U-Net | Quantitative advantage of the main model |
-| **Encoder filter visualization** | Conv-TasNet encoder weights plotted as frequency responses | Proves the learned encoder ≈ filter bank |
-| **Mask visualization** | TCN output masks across time | Shows how the network attends to each speaker |
-| **Listening examples** | Before/after audio clips | The most convincing evidence of quality |
-
-### Example Results Table (expected)
-
-| Model | SI-SNRi (dB) | SDRi (dB) | STOI | Params |
-|-------|-------------|-----------|------|--------|
-| Mixture (input) | 0.0 | 0.0 | ~0.55 | — |
-| Spectrogram U-Net | ~10.5 | ~10.0 | ~0.82 | 7.8M |
-| **Conv-TasNet** | **~14.5** | **~14.0** | **~0.92** | 5.1M |
-
-### Experiments Shortlist
-
-1. **Main result**: Train Conv-TasNet 100 epochs, report test SI-SNRi
-2. **Baseline comparison**: Train U-Net same epochs, compare
-3. **Ablation — encoder kernel**: L=8 vs 16 vs 32 (temporal resolution)
-4. **Ablation — repeats**: R=1 vs 2 vs 3 (receptive field)
-5. **Augmentation effect**: With vs. without augmentation
-6. **Generalization**: Evaluate on unseen noise conditions
+| Model | SI-SNRi | SDRi | STOI | Params |
+|---|---|---|---|---|
+| Mixture (input) | 0.0 dB | 0.0 dB | ~0.55 | — |
+| Spectrogram U-Net | ~10.5 dB | ~10.0 dB | ~0.82 | 7.8M |
+| **Conv-TasNet** | **~14.5 dB** | **~14.0 dB** | **~0.92** | **8.2M** |
+| Conv-TasNet (paper) | 15.3 dB | 15.6 dB | — | 5.1M |
 
 ---
 
-## 7. Implementation Guide
+## Build & Run
 
-### Project Structure
+### Prerequisites
 
-```
-prml-project/
-├── CMakeLists.txt               # Build system
-├── README.md                    # This file
-├── .gitignore
-├── scripts/
-│   └── generate_librimix.sh     # Dataset generation
-├── src/
-│   ├── audio_utils.h/.cpp       # WAV I/O (libsndfile)
-│   ├── preprocessing.h/.cpp     # Normalize, VAD trim
-│   ├── stft.h/.cpp              # STFT/iSTFT, magnitude/phase
-│   ├── augmentation.h/.cpp      # Training augmentations
-│   ├── dataset.h/.cpp           # LibriMix CSV dataset loader
-│   ├── conv_tasnet.h/.cpp       # Main: Conv-TasNet
-│   ├── unet.h/.cpp              # Baseline: Spectrogram U-Net
-│   ├── losses.h/.cpp            # SI-SNR, PIT, spectral loss
-│   ├── metrics.h/.cpp           # SI-SNRi, SDRi, STOI
-│   ├── train.cpp                # Training entry point
-│   └── inference.cpp            # Inference + evaluation
-├── libtorch/                    # LibTorch (gitignored)
-├── checkpoints/                 # Saved models
-└── output/                      # Separated audio files
-```
-
-### Dependencies
-
-| Dependency | Version | Purpose |
-|------------|---------|---------|
-| **LibTorch** | 2.6.0+cu124 | Neural network framework |
-| **libsndfile** | ≥ 1.0.31 | WAV file I/O |
-| **CMake** | ≥ 3.18 | Build system |
-| **g++** | ≥ 11 | C++17 compiler |
-| **CUDA** | ≥ 12.4 | GPU acceleration |
+| Tool | Version | Install |
+|---|---|---|
+| g++ | ≥ 11 | `sudo apt install g++` |
+| CMake | ≥ 3.18 | `sudo apt install cmake` |
+| libsndfile | ≥ 1.0.31 | `sudo apt install libsndfile1-dev` |
+| GTK+ 3 | ≥ 3.20 | `sudo apt install libgtk-3-dev` (for GUI) |
+| LibTorch | 2.6.0+cu124 | Already in `libtorch/` |
+| CUDA | ≥ 12.4 | Driver + toolkit |
+| ffmpeg | any | `sudo apt install ffmpeg` (for the GUI's media conversion) |
 
 ### Build
 
 ```bash
-# 1. Download LibTorch (if not present)
-wget -q https://download.pytorch.org/libtorch/cu124/libtorch-cxx11-abi-shared-LATEST.zip
-unzip -q libtorch-cxx11-abi-shared-LATEST.zip -d .
-
-# 2. Install libsndfile
-sudo apt install libsndfile1-dev
-
-# 3. Build
-mkdir build && cd build
+cd prml-project
+mkdir -p build && cd build
 cmake -DCMAKE_PREFIX_PATH=../libtorch ..
 make -j$(nproc)
 ```
 
+This produces three binaries:
+- `./build/train` — model training
+- `./build/inference` — separation + optional evaluation
+- `./build/gui` — GTK3 desktop GUI
+
 ### Smoke Test
 
 ```bash
-# Validates model architecture, STFT roundtrip, loss functions, metrics
 ./build/train --smoke_test
 ./build/inference --smoke_test
 ```
 
-### Training
+Validates architectures, STFT roundtrip, loss functions, and metrics — no dataset required.
+
+### Generate Dataset
 
 ```bash
-# Conv-TasNet (main model)
-./build/train \
-    --model tasnet \
-    --data_dir ./data/Libri2Mix/wav8k/min/train-360 \
-    --val_dir  ./data/Libri2Mix/wav8k/min/dev \
-    --epochs 100 --batch_size 4 --lr 1e-3
-
-# Spectrogram U-Net (baseline)
-./build/train \
-    --model unet \
-    --data_dir ./data/Libri2Mix/wav8k/min/train-360 \
-    --val_dir  ./data/Libri2Mix/wav8k/min/dev \
-    --epochs 100 --batch_size 4 --lr 1e-3
+bash scripts/generate_librimix.sh ./data
 ```
+
+Downloads LibriSpeech (~30 GB) and generates Libri2Mix mixtures (~36 GB total). Requires Python 3 and sox.
+
+### Train
+
+```bash
+# Background training (recommended)
+PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True nohup ./build/train \
+    --model tasnet \
+    --data_dir ./data/Libri2Mix/Libri2Mix/wav8k/min/train-360 \
+    --val_dir  ./data/Libri2Mix/Libri2Mix/wav8k/min/dev \
+    --epochs 100 --batch_size 4 --accumulate 1 --lr 1e-3 \
+    > training.log 2>&1 &
+echo $! > training_pid.txt
+
+# Monitor
+tail -f training.log
+```
+
+### Training Flags
+
+| Flag | Default | Description |
+|---|---|---|
+| `--model` | `tasnet` | `tasnet` or `unet` |
+| `--data_dir` | (required) | Path to training split |
+| `--val_dir` | (optional) | Path to validation split |
+| `--epochs` | `100` | Number of epochs |
+| `--batch_size` | `2` | Micro-batch size |
+| `--accumulate` | `3` | Gradient accumulation steps |
+| `--lr` | `1e-3` | Base learning rate |
+| `--warmup_epochs` | `5` | Linear warmup epochs |
+| `--min_lr` | `1e-6` | LR floor |
+| `--grad_clip` | `5.0` | Max gradient norm |
+| `--seg_len` | `32000` | Segment length in samples (4 s) |
+| `--sr` | `8000` | Sample rate |
+| `--workers` | `4` | Data loader threads |
+| `--no_augment` | (flag) | Disable augmentation |
+| `--resume` | (path) | Resume from checkpoint |
+| `--ckpt_dir` | `./checkpoints` | Checkpoint directory |
+| `--log_interval` | `25` | Print every N batches |
+| `--save_interval` | `5` | Periodic save every N epochs |
 
 ### Inference
 
 ```bash
-# Separate a mixture
+# Basic separation
 ./build/inference \
     --model tasnet \
     --checkpoint checkpoints/best_tasnet.pt \
-    --input test_mixture.wav
+    --input mixture.wav
 
-# With evaluation against ground truth
+# With quality evaluation (requires ground-truth sources)
 ./build/inference \
     --model tasnet \
     --checkpoint checkpoints/best_tasnet.pt \
-    --input test_mixture.wav \
+    --input mixture.wav \
     --ref_s1 clean_speaker1.wav \
     --ref_s2 clean_speaker2.wav
 ```
 
-### Dataset Generation
+Output: `output/source_1.wav` and `output/source_2.wav`
+
+### Using MP4/Video/Non-WAV Input
+
+The inference binary works with 8 kHz mono WAV. For other formats, convert first:
 
 ```bash
-bash scripts/generate_librimix.sh ./data
-# Requires ~100 GB disk, Python 3, and sox
+ffmpeg -i video.mp4 -vn -acodec pcm_s16le -ar 8000 -ac 1 mixture.wav
+./build/inference --model tasnet --checkpoint checkpoints/best_tasnet.pt --input mixture.wav
 ```
 
-### Checkpoint Management
-
-- `best_tasnet.pt` / `best_unet.pt` — best validation SI-SNR
-- `tasnet_epN.pt` / `unet_epN.pt` — every 10 epochs
-- `final_tasnet.pt` / `final_unet.pt` — end of training
+Or simply use the [GUI application](#gui-application), which handles conversion automatically.
 
 ---
 
-## 8. Project Narrative for Reports
+## GUI Application
 
-### Main Scientific Idea
-
-We combine **signal processing** (STFT, time-frequency analysis) with **deep learning** (temporal convolutional networks) to solve the cocktail party problem. The project demonstrates that:
-
-1. Classical Fourier analysis provides interpretable time-frequency representations
-2. Learned representations (Conv-TasNet encoder) outperform hand-designed ones (STFT)
-3. Permutation-invariant training solves the label ambiguity problem elegantly
-
-### How to Frame in a PRML Report
-
-**Section 1 — Introduction**: The cocktail party problem. Why single-channel separation is fundamentally ill-posed. How can we solve an underdetermined system?
-
-**Section 2 — Signal Processing Foundation**: STFT theory, windowing, overlap-add reconstruction. Why non-stationarity of speech requires time-frequency analysis. This establishes the mathematical foundation.
-
-**Section 3 — Masking-Based Separation**: How T-F masks can separate speakers. The ideal binary mask (IBM), ideal ratio mask (IRM), and neural mask estimation. This connects STFT to the supervised learning problem.
-
-**Section 4 — Conv-TasNet Architecture**: The key insight: replace STFT with a **learned encoder** (1D convolution). Show that the encoder learns filter bank-like representations. TCN for temporal modeling with exponentially growing receptive field.
-
-**Section 5 — Training**: PIT loss derivation (combinatorial optimization over permutations). SI-SNR as a scale-invariant objective. Connection to maximum likelihood estimation.
-
-**Section 6 — Experiments**: Quantitative comparison (Conv-TasNet vs. U-Net), ablations, visualizations.
-
-**Mathematical highlights to include:**
-- STFT as a windowed inner product: `X(t,f) = ⟨x · w_t, e_f⟩`
-- SI-SNR derivation from projection operators
-- PIT as minimization over the symmetric group S_C
-- Depth-separable convolution as a low-rank approximation of standard convolution
-
-### Baseline Justification
-
-The U-Net provides a fair comparison because:
-1. Same dataset, same loss, same training
-2. Uses classical STFT → demonstrates that learned representations outperform hand-crafted ones
-3. Interpretable masks that can be visualized
-
-### What Makes This Project Impressive
-
-1. **End-to-end C++ implementation** — real engineering, not just notebook code
-2. **Dual architecture** — shows depth of understanding (learned vs. hand-crafted features)
-3. **Full evaluation pipeline** — SI-SNR, SDR, STOI, spectrograms, audio demos
-4. **Signal processing + ML** — bridges the gap between PRML theory and practice
-5. **Production-quality code** — modular, documented, testable
-
-### Presentation Outline
-
-1. **Problem demo** (30s): Play mixed audio, then separated. Hook the audience.
-2. **Background** (2 min): Speech as a signal. STFT. Why separation is hard.
-3. **Our approach** (3 min): Conv-TasNet architecture. Learned encoder vs. STFT.
-4. **Training** (2 min): PIT loss, SI-SNR, dataset.
-5. **Results** (3 min): Comparison table, spectrograms, loss curves.
-6. **Demo** (1 min): Live separation on unseen audio.
-7. **Conclusion** (30s): Learned > hand-crafted. Future work.
-
----
-
-## 9. Quick Start
+A native **GTK3 desktop application** (written in C++) for separating audio from any media file. No Python required.
 
 ```bash
-# Clone and build
-git clone <repo-url> prml-project && cd prml-project
-# Ensure libtorch/ exists (download if needed)
-mkdir build && cd build
-cmake -DCMAKE_PREFIX_PATH=../libtorch .. && make -j$(nproc)
+./build/gui
+```
 
-# Smoke test
-./train --smoke_test
-./inference --smoke_test
+**Workflow:**
+1. Click **Select File** — supports MP4, MKV, AVI, MP3, WAV, FLAC, OGG, and more
+2. Click **Separate Speakers** — the GUI runs ffmpeg conversion + Conv-TasNet inference
+3. **Play** or **Save** each separated speaker track
 
-# Generate dataset (requires ~100 GB)
-cd .. && bash scripts/generate_librimix.sh ./data
+The GUI automatically locates the inference binary, the best available checkpoint, and handles the ffmpeg conversion pipeline. It provides status feedback and error reporting through the GTK interface.
 
-# Train Conv-TasNet
-./build/train --model tasnet \
-    --data_dir ./data/Libri2Mix/wav8k/min/train-360 \
-    --val_dir  ./data/Libri2Mix/wav8k/min/dev
+---
 
-# Separate audio
-./build/inference --model tasnet \
-    --checkpoint checkpoints/best_tasnet.pt \
-    --input my_mixture.wav
+## Project Structure
+
+```
+prml-project/
+├── CMakeLists.txt                  Build configuration
+├── README.md                       This file
+├── .gitignore
+│
+├── src/
+│   ├── conv_tasnet.h / .cpp        Conv-TasNet model (encoder, TCN separator, decoder)
+│   ├── unet.h / .cpp               Spectrogram U-Net baseline
+│   ├── train.cpp                   Training entry point
+│   ├── inference.cpp               Inference + evaluation entry point
+│   ├── gui.cpp                     GTK3 desktop GUI
+│   ├── dataset.h / .cpp            LibriMix CSV dataset loader
+│   ├── losses.h / .cpp             SI-SNR and PIT loss
+│   ├── metrics.h / .cpp            SI-SNRi, SDRi, STOI
+│   ├── audio_utils.h / .cpp        WAV I/O via libsndfile
+│   ├── stft.h / .cpp               STFT / iSTFT
+│   ├── preprocessing.h / .cpp      Normalize, VAD trim
+│   └── augmentation.h / .cpp       Training augmentations
+│
+├── scripts/
+│   └── generate_librimix.sh        Dataset download & generation
+│
+├── libtorch/                       LibTorch runtime (gitignored)
+├── third_party/                    Local libsndfile (fallback)
+├── checkpoints/                    Saved model weights
+├── data/                           Libri2Mix dataset
+└── output/                         Separated audio output
 ```
 
 ---
 
-## 10. References
+## Results & Expectations
 
-1. Luo, Y. & Mesgarani, N. (2019). *Conv-TasNet: Surpassing Ideal Time-Frequency Magnitude Masking for Speech Separation*. IEEE/ACM TASLP.
-2. Hershey, J.R. et al. (2016). *Deep Clustering: Discriminative Embeddings for Segmentation and Separation*. ICASSP.
-3. Yu, D. et al. (2017). *Permutation Invariant Training of Deep Models for Speaker-Independent Multi-Talker Speech Separation*. ICASSP.
-4. Le Roux, J. et al. (2019). *SDR – Half-Baked or Well Done?*. ICASSP.
-5. Cosentino, J. et al. (2020). *LibriMix: An Open-Source Dataset for Generalizable Speech Separation*. arXiv.
-6. Ronneberger, O. et al. (2015). *U-Net: Convolutional Networks for Biomedical Image Segmentation*. MICCAI.
-7. Subakan, C. et al. (2021). *Attention is All You Need in Speech Separation*. ICASSP (SepFormer).
+### Will it reach 20 dB SI-SNR?
+
+Based on the current training trajectory:
+
+| Milestone | Estimated time | Justification |
+|---|---|---|
+| **10 dB** (val SI-SNR) | ~2–3 epochs (~3 h) | Already at ~11.7 dB val after epoch 1 |
+| **13 dB** | ~10–15 epochs (~15 h) | Rapid improvement phase |
+| **14–15 dB** | ~30–50 epochs (~50 h) | Refinement, LR reductions |
+| **20 dB** | **Unlikely** | Exceeds published SOTA for this architecture |
+
+The Conv-TasNet paper reports **15.3 dB SI-SNRi** on WSJ0-2mix. Libri2Mix is a harder dataset (more speakers, more diverse content). For this architecture, **13–15 dB on Libri2Mix is a strong result**. Reaching 20 dB would require a fundamentally different (and much larger) architecture like SepFormer (~26M params with self-attention).
+
+### Training Timeline (RTX 4070, batch=4)
+
+| Phase | Epochs | Time | What happens |
+|---|---|---|---|
+| Warmup | 1–5 | ~8 h | LR ramps up, model learns basic patterns |
+| Rapid improvement | 6–20 | ~24 h | Biggest SI-SNR gains |
+| Refinement | 21–50 | ~48 h | Slower gains, LR reductions begin |
+| Polish | 51–100 | ~80 h | Diminishing returns |
 
 ---
 
-**License**: MIT
+## References
+
+1. Y. Luo & N. Mesgarani. *Conv-TasNet: Surpassing Ideal Time–Frequency Magnitude Masking for Speech Separation.* IEEE/ACM TASLP, 2019.
+2. J. R. Hershey et al. *Deep Clustering: Discriminative Embeddings for Segmentation and Separation.* ICASSP, 2016.
+3. D. Yu et al. *Permutation Invariant Training of Deep Models for Speaker-Independent Multi-Talker Speech Separation.* ICASSP, 2017.
+4. J. Le Roux et al. *SDR — Half-Baked or Well Done?* ICASSP, 2019.
+5. J. Cosentino et al. *LibriMix: An Open-Source Dataset for Generalizable Speech Separation.* arXiv, 2020.
+6. O. Ronneberger et al. *U-Net: Convolutional Networks for Biomedical Image Segmentation.* MICCAI, 2015.
+7. C. Subakan et al. *Attention Is All You Need in Speech Separation.* ICASSP, 2021 (SepFormer).
+
+---
+
+**License:** MIT

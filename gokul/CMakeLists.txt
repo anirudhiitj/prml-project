@@ -55,3 +55,18 @@ target_link_libraries(train PRIVATE speechsep)
 
 add_executable(inference src/inference.cpp)
 target_link_libraries(inference PRIVATE speechsep)
+
+# ── GUI (GTK3) ────────────────────────────────────────────────────────────────
+find_package(PkgConfig QUIET)
+if(PkgConfig_FOUND)
+    pkg_check_modules(GTK3 gtk+-3.0)
+endif()
+if(GTK3_FOUND)
+    add_executable(gui src/gui.cpp)
+    target_include_directories(gui PRIVATE ${GTK3_INCLUDE_DIRS})
+    target_link_libraries(gui PRIVATE ${GTK3_LIBRARIES} pthread stdc++fs)
+    target_compile_options(gui PRIVATE ${GTK3_CFLAGS_OTHER})
+    message(STATUS "GTK3 found — building GUI")
+else()
+    message(STATUS "GTK3 not found — GUI will not be built (install libgtk-3-dev)")
+endif()

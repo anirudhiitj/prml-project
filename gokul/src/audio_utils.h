@@ -20,6 +20,10 @@ torch::Tensor load_wav(const std::string& path, int target_sr = 8000);
 /// @param sample_rate Sample rate in Hz
 void save_wav(const std::string& path, torch::Tensor waveform, int sample_rate = 8000);
 
+/// Load any audio file, auto-resampling via ffmpeg if needed.
+/// Handles wrong sample rate, multi-channel, and non-WAV formats (MP3/MP4/FLAC…).
+torch::Tensor load_wav_resample(const std::string& path, int target_sr = 8000);
+
 /// Pad or truncate waveform to exactly `length` samples.
 torch::Tensor fix_length(torch::Tensor waveform, int64_t length);
 

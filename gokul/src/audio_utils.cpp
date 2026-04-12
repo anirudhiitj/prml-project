@@ -5,6 +5,10 @@
 #include <sndfile.h>
 #include <stdexcept>
 #include <vector>
+#include <cstdlib>
+#include <cstdio>
+#include <iostream>
+#include <unistd.h>
 
 namespace audio {
 
@@ -41,7 +45,7 @@ void save_wav(const std::string& path, torch::Tensor w, int sample_rate) {
     SF_INFO info{};
     info.samplerate = sample_rate;
     info.channels   = 1;
-    info.format     = SF_FORMAT_WAV | SF_FORMAT_FLOAT;
+    info.format     = SF_FORMAT_WAV | SF_FORMAT_PCM_16;
 
     SNDFILE* file = sf_open(path.c_str(), SFM_WRITE, &info);
     if (!file)
@@ -61,6 +65,46 @@ torch::Tensor fix_length(torch::Tensor w, int64_t length) {
         w = torch::cat({w, torch::zeros({w.size(0), length - T}, w.options())}, 1);
     if (orig_dim == 1) w = w.squeeze(0);
     return w;
+}
+
+torch::Tensor load_wav_resample(const std::string& path, int target_sr) {
+    // Try probing the file with libsndfile
+    SF_INFO info{};
+    SNDFILE* file = sf_open(path.c_str(), SFM_READ, &info);
+
+    if (file) {
+        int actual_sr = info.samplerate;
+        int channels  = info.channels;
+        sf_close(file);
+
+        if (actual_sr == target_sr && channels == 1)
+            return load_wav(path, target_sr);
+
+        // Need conversion
+        if (actual_sr != target_sr)
+            std::cout << "[Audio] Resampling " << actual_sr
+                      << " -> " << target_sr << " Hz\n";
+        if (channels > 1)
+            std::cout << "[Audio] Mixing " << channels
+                      << " channels -> mono\n";
+    } else {
+        // libsndfile can't open it (MP3/MP4/etc.) — try ffmpeg
+        std::cout << "[Audio] Converting via ffmpeg\n";
+    }
+
+    std::string tmp = "/tmp/prml_sep_" + std::to_string(getpid()) + ".wav";
+    std::string cmd = "ffmpeg -y -loglevel error -i \"" + path +
+                      "\" -ar " + std::to_string(target_sr) +
+                      " -ac 1 \"" + tmp + "\"";
+    int ret = std::system(cmd.c_str());
+    if (ret != 0)
+        throw std::runtime_error(
+            "Cannot load audio: " + path +
+            ". Install ffmpeg or convert to " +
+            std::to_string(target_sr) + " Hz mono WAV.");
+    auto wav = load_wav(tmp, target_sr);
+    std::remove(tmp.c_str());
+    return wav;
 }
 
 }  // namespace audio

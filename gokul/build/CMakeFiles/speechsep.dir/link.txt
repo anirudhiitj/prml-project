@@ -1,0 +1,2 @@
+/usr/bin/ar qc libspeechsep.a CMakeFiles/speechsep.dir/src/audio_utils.cpp.o CMakeFiles/speechsep.dir/src/preprocessing.cpp.o CMakeFiles/speechsep.dir/src/stft.cpp.o CMakeFiles/speechsep.dir/src/augmentation.cpp.o CMakeFiles/speechsep.dir/src/dataset.cpp.o CMakeFiles/speechsep.dir/src/conv_tasnet.cpp.o CMakeFiles/speechsep.dir/src/unet.cpp.o CMakeFiles/speechsep.dir/src/losses.cpp.o CMakeFiles/speechsep.dir/src/metrics.cpp.o
+/usr/bin/ranlib libspeechsep.a

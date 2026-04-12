@@ -33,6 +33,32 @@ pip install torch torchaudio --index-url https://download.pytorch.org/whl/cpu
 pip install -r requirements.txt
 ```
 
+> **Windows users — if you get a build error for `pesq` or `pyroomacoustics`:**
+>
+> These packages have C extensions and require Microsoft C++ Build Tools to compile from source.
+> They are only used by training/evaluation scripts — **the web app does not need them**.
+> Either skip them or install pre-built wheels:
+>
+> ```bash
+> pip install pesq --only-binary :all:
+> pip install pyroomacoustics --only-binary :all:
+> ```
+>
+> If no pre-built wheel exists for your Python version, just skip those two lines — `uvicorn app:app` will work without them.
+
+> **If you want to use Mayank's Conv-TasNet (Asteroid) model (Linux or Windows):**
+>
+> Asteroid's default install pulls in C++ dependencies that often fail to build. Instead, run:
+>
+> ```bash
+> pip install asteroid --no-deps
+> pip install asteroid-filterbanks julius pytorch-lightning "torch-optimizer<0.2.0" "torchmetrics<=0.11.4"
+> ```
+>
+> This works on both Windows and Linux. If you see errors about `pb_bss_eval` or `torch-stoi`, IGNORE them — they are not needed for inference.
+
+If you only want to run the web app and not train/evaluate, you can skip Asteroid entirely (the Mayank model will just be unavailable in the UI).
+
 ### 3. Run the server
 
 ```bash

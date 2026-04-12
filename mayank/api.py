@@ -15,6 +15,13 @@ from pathlib import Path
 from fastapi import APIRouter, UploadFile, File, Form
 from fastapi.responses import JSONResponse
 
+
+# --- Asteroid import check ---
+try:
+    import asteroid
+except ImportError as e:
+    raise ImportError("\n\n[Mayank model] Asteroid library is not installed.\n\nTo use this model, run:\n  pip install asteroid --no-deps\n  pip install asteroid-filterbanks julius pytorch-lightning 'torch-optimizer<0.2.0' 'torchmetrics<=0.11.4'\n\nSee Global_How_To_Run.md for details.\n") from e
+
 import importlib.util as _ilu
 _model_spec = _ilu.spec_from_file_location("mayank_model", os.path.join(os.path.dirname(__file__), "model.py"))
 _model_mod = _ilu.module_from_spec(_model_spec)

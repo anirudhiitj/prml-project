@@ -7,8 +7,17 @@ from pathlib import Path
 import numpy as np
 import torch
 from omegaconf import OmegaConf
-from pesq import pesq
 from scipy.optimize import linear_sum_assignment
+
+try:
+    from pesq import pesq
+except ImportError:  # pragma: no cover
+    pesq = None  # type: ignore
+    import warnings
+    warnings.warn(
+        "pesq is not installed. PESQ metric will be skipped.\n"
+        "Install with: pip install pesq --only-binary :all:"
+    )
 from tqdm import tqdm
 
 try:
@@ -69,6 +78,8 @@ def reorder_by_hungarian(est: torch.Tensor, ref: torch.Tensor) -> torch.Tensor:
 
 
 def safe_pesq(ref: np.ndarray, deg: np.ndarray, fs: int) -> float:
+    if pesq is None:
+        return float("nan")
     try:
         return float(pesq(fs, ref, deg, "wb"))
     except Exception:

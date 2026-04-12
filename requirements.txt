@@ -20,16 +20,26 @@ PyYAML
 pandas
 huggingface_hub
 
+
 # ── Asteroid (Mayank's model — speech separation) ──
-# NOTE: Do NOT install asteroid directly via pip on Windows — it pulls in
-# pb_bss_eval and torch-stoi which require Microsoft C++ Build Tools.
-# Instead install with:
+# NOTE: Do NOT install asteroid directly via pip on Windows or Linux — it pulls in
+# pb_bss_eval and torch-stoi which require C++ build tools and often fail.
+#
+# Instead, install Asteroid core with --no-deps, then install only the needed sub-dependencies:
+#
 #   pip install asteroid --no-deps
 #   pip install asteroid-filterbanks julius pytorch-lightning "torch-optimizer<0.2.0" "torchmetrics<=0.11.4"
+#
+# This works on both Windows and Linux. If you see errors about pb_bss_eval or torch-stoi, IGNORE them — they are not needed for inference.
+#
+# If you want to install everything for Mayank's model (Conv-TasNet/Asteroid), run:
+#   pip install asteroid --no-deps && pip install asteroid-filterbanks julius pytorch-lightning "torch-optimizer<0.2.0" "torchmetrics<=0.11.4"
+#
 asteroid-filterbanks
 julius
 pytorch-lightning
 torch-optimizer<0.2.0
+torchmetrics<=0.11.4
 
 # ── Gokul Conv-TasNet (Python inference, no C++ compilation needed) ──
 # Uses: torch, soundfile, scipy, numpy  (all already listed above)
@@ -38,9 +48,27 @@ torch-optimizer<0.2.0
 # torch.jit.load() + state_dict transfer into a Python model.
 
 # ── Anirudh cocktail_separation requirements ──
-pyroomacoustics>=0.7.3
+# NOTE: The packages below are only needed for TRAINING / EVALUATION scripts
+# (train.py, evaluate.py, generate_mixtures_fast.py).
+# They are NOT required to run the web app (uvicorn app:app).
+#
+# pesq  — has a C extension; on Windows without MSVC Build Tools install with:
+#   pip install pesq --only-binary :all:
+#   If no pre-built wheel is available for your Python version, skip it:
+#   pip install pesq --only-binary :all: || echo "pesq skipped"
+#
+# pyroomacoustics — also has C extensions; same workaround:
+#   pip install pyroomacoustics --only-binary :all:
+#
+# wandb — pure Python, safe to install normally.
+#
+# To install ONLY what the web app needs (recommended for the friend):
+#   pip install -r requirements.txt --ignore-requires-python
+# OR just skip the block below entirely — the app will still work.
 mir_eval>=0.7
-pesq>=0.0.4
-wandb>=0.16.0
 hydra-core>=1.3.0
 omegaconf>=2.3.0
+wandb>=0.16.0
+# pesq and pyroomacoustics intentionally omitted — install separately if needed:
+#   pip install pesq --only-binary :all:
+#   pip install pyroomacoustics --only-binary :all:

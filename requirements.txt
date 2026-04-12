@@ -10,11 +10,23 @@ soundfile>=0.12.1
 numpy>=1.24.0
 scipy>=1.11.0
 matplotlib>=3.7.0
-asteroid
 librosa
 accelerate
-fastapi
-python-multipart
 tqdm
-torchmetrics
+torchmetrics<=0.11.4
 tensorboard
+einops
+PyYAML
+pandas
+huggingface_hub
+
+# ── Asteroid (Mayank's model — speech separation) ──
+# NOTE: Do NOT install asteroid directly via pip on Windows — it pulls in
+# pb_bss_eval and torch-stoi which require Microsoft C++ Build Tools.
+# Instead install with:
+#   pip install asteroid --no-deps
+#   pip install asteroid-filterbanks julius pytorch-lightning "torch-optimizer<0.2.0" "torchmetrics<=0.11.4"
+asteroid-filterbanks
+julius
+pytorch-lightning
+torch-optimizer<0.2.0

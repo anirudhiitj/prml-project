@@ -31,6 +31,12 @@ julius
 pytorch-lightning
 torch-optimizer<0.2.0
 
+# ── Gokul Conv-TasNet (Python inference, no C++ compilation needed) ──
+# Uses: torch, soundfile, scipy, numpy  (all already listed above)
+# The checkpoint (gokul/checkpoints/best_tasnet.pt) was saved as a
+# TorchScript archive from the C++ training code and is loaded via
+# torch.jit.load() + state_dict transfer into a Python model.
+
 # ── Anirudh cocktail_separation requirements ──
 pyroomacoustics>=0.7.3
 mir_eval>=0.7

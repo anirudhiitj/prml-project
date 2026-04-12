@@ -62,3 +62,13 @@ Go to **http://localhost:8000** in your browser.
 - Models whose dependencies are not installed are **skipped gracefully** at startup (the server still runs, those models just show as unavailable).
 - All inference runs on **CPU** — no GPU required.
 - Audio is processed at **8 kHz** (mohit, mayank, gokul) or **16 kHz** (anirudh).
+
+### Gokul's Conv-TasNet C++
+
+No C++ compilation is needed. The model's checkpoint (`gokul/checkpoints/best_tasnet.pt`) was saved as a TorchScript archive from the C++ training code and is loaded directly by a matching pure-Python Conv-TasNet implementation (`gokul/model.py`).
+
+If you are running on a Linux server where the C++ binary is compiled, you can enable the native binary instead:
+
+```bash
+USE_CPP_BINARY=1 uvicorn app:app --port 8000
+```
